@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>ARF_CountryCode__c</fullName>
+    <description>Country code field (External ID, Unique) matching User.Usage_Company__c values (e.g., &apos;SP&apos;, &apos;FR&apos;, &apos;DE&apos;)</description>
+    <externalId>false</externalId>
+    <label>Country Code</label>
+    <length>10</length>
+    <required>true</required>
+    <trackFeedHistory>false</trackFeedHistory>
+    <trackHistory>false</trackHistory>
+    <trackTrending>false</trackTrending>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>

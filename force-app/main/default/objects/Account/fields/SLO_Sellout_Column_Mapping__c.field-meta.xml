@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+            <fullName>SLO_Sellout_Column_Mapping__c</fullName>
+            <label>Sellout Column Mapping</label>
+            <description>Stores JSON mapping of Excel column headers to sellout item fields for automatic column mapping on subsequent imports. Format: {&quot;itemDate&quot;:&quot;Column Name&quot;,&quot;productCode&quot;:&quot;Column Name&quot;,&quot;quantity&quot;:&quot;Column Name&quot;,&quot;customerAccountName&quot;:&quot;Column Name&quot;,&quot;csvDelimiter&quot;:&quot;,&quot;} where csvDelimiter can be comma (,), semicolon (;), or tab (\t).</description>
+            <type>LongTextArea</type>
+            <length>10000</length>
+            <visibleLines>3</visibleLines>
+            <trackHistory>false</trackHistory>
+            
+            <!-- Field Level Security - Visible and Editable for all profiles by default -->
+            <securityClassification>Public</securityClassification>
+            <complianceGroup>None</complianceGroup>
+
+        </CustomField>

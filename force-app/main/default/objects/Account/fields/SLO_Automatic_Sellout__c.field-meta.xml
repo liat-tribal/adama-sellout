@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+            <fullName>SLO_Automatic_Sellout__c</fullName>
+            <label>Automated Sellout Enabled</label>
+            <description>Activates the automated sellout invoice review for this account. When checked, the scheduled review batch scans this account's invoices, derives the final customers from their orders, and creates Internal Sellout invoices for them. Accounts without this flag are left alone by the batch.</description>
+            <type>Checkbox</type>
+            <defaultValue>false</defaultValue>
+            <trackHistory>false</trackHistory>
+
+            <!-- Field Level Security - Visible and Editable for all profiles by default -->
+            <securityClassification>Public</securityClassification>
+            <complianceGroup>None</complianceGroup>
+        </CustomField>

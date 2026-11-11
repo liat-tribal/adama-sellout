@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Invoice_Value__c</fullName>
+    <formula>IF(YearAfter2022__c , Total_After_Discount__c,
+IF(Usage_Company__c= &quot;AU&quot; &amp;&amp; Quantity__c =0 ,
+Net_Price__c ,
+Unit_Price__c * Quantity__c))</formula>
+    <formulaTreatBlanksAs>BlankAsZero</formulaTreatBlanksAs>
+    <label>Invoice Value</label>
+    <precision>18</precision>
+    <required>false</required>
+    <scale>3</scale>
+    <trackTrending>false</trackTrending>
+    <type>Currency</type>
+</CustomField>

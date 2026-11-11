@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+            <fullName>SLO_Auto_Accepted__c</fullName>
+            <label>Auto Accepted</label>
+            <description>Marks reports created and applied by the daily Auto Accept job. When checked, the report&#x27;s lines open in a locked read-only review mode and Apex rejects edits to its items.</description>
+            <type>Checkbox</type>
+            <defaultValue>false</defaultValue>
+            <trackHistory>false</trackHistory>
+            
+            <!-- Field Level Security - Visible and Editable for all profiles by default -->
+            <securityClassification>Public</securityClassification>
+            <complianceGroup>None</complianceGroup>
+        </CustomField>

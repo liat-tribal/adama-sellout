@@ -1,0 +1,49 @@
+## Overall Risk Assessment
+Overall deployment risk is **Medium**. I did not run any org queries or read any code for this analysis. The assessment comes only from the project description, the requirements and the architecture notes. The changes concentrate on the Apex controller, the account matcher, two picklist value additions and three test classes. The main risk is the behaviour change in account matching, which will be restricted to the report account's own hierarchy. The picklist additions and test-class edits are low risk. Please verify the points below against the actual org code before deploying.
+
+## Changed Items
+- **SLO_SelloutAccountMatcher** (Apex class): Matching will be restricted to the report account, its children and its grandchildren. Cross-hierarchy and global name lookups are removed. Inactive-account reactivation will apply only inside the hierarchy. This is a functional behaviour change.
+- **SLO_SelloutImportController** (Apex class): Validation, re-validation after edits, bulk re-map and Auto Accept resolution will all use the hierarchy-restricted matching. The bulk re-map picker and handler will reject accounts outside the hierarchy.
+- **SLO_Sellout_Report__c.SLO_Status__c** (picklist): Adds the value 'Draft'. The full list becomes New, Draft, Completed, Error.
+- **SLO_Sellout_Item__c.SLO_Processing_Status__c** (picklist): Adds 'Pending_Decision'.
+- **Account.SLO_Automatic_Sellout__c** (checkbox): Modified. It is also used by the daily job and the validation rule.
+- **SLO_SelloutImportControllerTest, SLO_SelloutApplyBatchTest, SLO_SelloutValidationTest** (test classes): Updated tests, including a new test for the cross-hierarchy non-match.
+
+## Impact Details
+
+### selloutImportManager (LWC) — Medium
+- It calls SLO_SelloutImportController. Customer names that used to match an account under another parent will now fall into Account decision, or create a new child under the report account.
+- It may not handle the new status values 'Draft' and 'Pending_Decision' in its filters, badges and Apply button logic. The Apply button is currently enabled only for 'Completed'.
+- Action: check the status handling in the component, and confirm that the components exposed by the controller keep the same signatures.
+
+### SLO_SelloutAccountMatcherTest — Medium
+- It tests the matcher directly. Any assertion that relies on cross-hierarchy or global-name matching, or on reactivating accounts outside the hierarchy, will fail.
+- Action: update the test and run it before deployment. This class is not in the change set.
+
+### SLO_SelloutInvoiceCreator — Low
+- It references SLO_Sellout_Item__c. The only change is a picklist value addition.
+- Check that it has no logic that depends on an exhaustive list of statuses.
+
+### SLO_SelloutInvoiceCreatorTest — Low
+- It creates report and item data. It should be unaffected unless it relies on cross-hierarchy matching.
+
+### SLO_Sellout_Item__c-TRBL_Layout and SLO_Sellout_Report__c-TRBL_Layout (page layouts) — Low
+- The layouts display the picklist fields, so the new values appear automatically.
+- No action is needed.
+
+### SLO_Sellout_Full_Access (permission set) — Low
+- It grants access to the fields and classes. The picklist changes do not alter permissions.
+- The architecture notes say it will add class access for SLO_SelloutFixOffsetVat. Ensure that class deploys with it.
+
+### Account_Sellout_Import_Page (flexipage) — Low
+- It hosts the LWC. It is affected only indirectly through the LWC.
+
+## Other risks to verify
+- **Restricted picklists:** If the status picklists are restricted, any Apex, flow or data load that writes 'Draft' or 'Pending_Decision' will fail until the picklist deploys. Deploy the metadata before the Apex classes and the LWC.
+- **Existing data:** Existing items that were matched across hierarchies keep their current matches. Re-validation after an edit will now reset or reject them. Items already invoiced are not changed.
+- **Governor limits:** The new hierarchy queries (children and grandchildren) must stay bulk-safe. Review the SOQL count in the bulk re-map and re-validation paths for large reports.
+- **Account.SLO_Automatic_Sellout__c:** The Account validation rule will require SLO_Sellout_Method__c when this flag is true. Any existing accounts, flows, data loads or tests that set the flag without the method will fail on save. Check this before deploying.
+- **Tests:** Run all SLO_* test classes. The org needs at least 75% coverage.
+
+## Components To Deactivate
+None. No displaced automation was identified. The daily job is a new process, and the weekly SLO_SelloutInvoiceReviewBatch stays in place.

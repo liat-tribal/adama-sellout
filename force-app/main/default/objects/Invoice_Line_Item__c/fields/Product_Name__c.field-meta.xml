@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Product_Name__c</fullName>
+    <description>P2.1 - comes in from the integration as text. After Adama Product SKU&apos;s are imported into the system, we can revert to using the LU field instead.</description>
+    <label>Product Name (SKU)</label>
+    <required>false</required>
+    <trackTrending>false</trackTrending>
+    <type>TextArea</type>
+</CustomField>

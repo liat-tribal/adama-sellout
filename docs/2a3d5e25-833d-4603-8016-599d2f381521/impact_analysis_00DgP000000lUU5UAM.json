@@ -1,0 +1,50 @@
+## Overall Risk Assessment
+Overall deployment risk is **High**, but this is a preliminary assessment. I did not open the Apex, LWC or metadata files, and I ran no queries against the org. Everything below comes from the change list, the dependency list and the architecture build instructions. The main concern is that account matching in `SLO_SelloutAccountMatcher` and `SLO_SelloutImportController` is being narrowed to the report account's hierarchy. That can change which accounts are matched, which are created, and where invoices are booked. Two picklist modifications (`SLO_Status__c` and `SLO_Processing_Status__c`) add values that existing code and the UI may not handle.
+
+## Changed Items
+- **SLO_SelloutAccountMatcher** (Apex): matching is restricted to the report account, its children and its grandchildren. Cross-hierarchy and org-wide name lookups are removed. Inactive-account reactivation applies only inside the hierarchy. Customer names that matched accounts under other distributors will now go to Account decision, or get a new child account under the report account.
+- **SLO_SelloutImportController** (Apex): validation, re-validation, bulk re-map and Auto Accept resolution all use the hierarchy-only matcher. The bulk re-map picker and its handler reject accounts outside the hierarchy.
+- **SLO_SelloutImportControllerTest, SLO_SelloutApplyBatchTest, SLO_SelloutValidationTest** (tests): modified. Per the architecture document, the code was imported from GitHub.
+- **SLO_Sellout_Report__c.SLO_Status__c** (picklist): the 'Draft' value is added. Full set: New, Draft, Completed, Error.
+- **SLO_Sellout_Item__c.SLO_Processing_Status__c** (picklist): the 'Pending_Decision' value is added.
+- **Account.SLO_Automatic_Sellout__c** (checkbox): modified. It is relabelled 'Automated Sellout Enabled' and is used by the daily job and by the new validation rule `VR_AccountSelloutMethodRequired`. That rule is part of the same project, but it is not in the change list above.
+
+## Impact Details
+
+### selloutImportManager (LWC) — High
+- **Dependency:** it calls `SLO_SelloutImportController` and reads item and report fields.
+- **Risk:** any UI logic that keys off status values, such as the Apply button being enabled only when the status is 'Completed', will not know about 'Draft' or 'Pending_Decision'. Changes to the Apex return shapes could also break it. Note that the architecture describes `selloutImportManager2`, while the affected component is `selloutImportManager`. Confirm which one is on the page.
+- **Action:** check the status handling and the controller method signatures. Confirm the `Account_Sellout_Import_Page` flexipage uses the intended component.
+
+### SLO_SelloutAccountMatcherTest — High
+- **Dependency:** it tests the matcher directly. It may assert cross-hierarchy or name-only matching, or reactivation of accounts outside the hierarchy.
+- **Risk:** it will fail if it relies on the old behaviour, which would block the deployment. Test classes in this deploy do not include this one.
+- **Action:** run it before deploying. Update it, and add a test that an account with the same name under another parent is not matched.
+
+### SLO_SelloutInvoiceCreator — Low
+- **Dependency:** it reads `SLO_Sellout_Item__c` fields. It is not directly impacted by the picklist addition unless it switches on status values.
+
+### SLO_SelloutInvoiceCreatorTest — Low
+- **Dependency:** it creates report and item records. It is affected only if its test data uses the changed status values or relies on cross-hierarchy matching.
+
+### SLO_Sellout_Full_Access (permission sets, two copies, `0PSgP000000JDHhWAO` and `0PSPc000000FUyfOAG`) — Low
+- **Dependency:** they grant class access and field access.
+- **Action:** the project adds classAccess for `SLO_SelloutFixOffsetVat`. Confirm both copies are deployed consistently, because the `SLO_Sellout_Full_Access` name appears twice.
+
+### SLO_Sellout_Item__c-TRBL_Layout and SLO_Sellout_Report__c-TRBL_Layout (page layouts) — Low
+- **Dependency:** they reference the changed picklists.
+- **Risk:** the new picklist values appear on the layouts automatically. No layout change is needed.
+
+### Account_Sellout_Import_Page (flexipage) — Low
+- **Dependency:** transitive, through the LWC.
+- **Action:** retest the page after deployment.
+
+## Cross-cutting risks
+- **Behaviour change:** existing items that were matched across hierarchies could be re-validated and flip to Account decision. Items that have already been invoiced are not changed.
+- **Auto Accept:** the daily Auto Accept job will now create new child accounts, where it previously matched accounts elsewhere. This can create duplicate-named accounts and raise the Accounts Created count.
+- **Governor limits:** the hierarchy queries on `Parent.ParentId` and the grandchild lookup must stay bulk-safe. The build instructions say they are.
+- **Picklists:** both fields are restricted. Deploying the picklist metadata before the Apex avoids a window in which code writes values that do not yet exist.
+- **Validation rule:** the Account validation rule can block saves in other Account automations or integrations when `SLO_Automatic_Sellout__c` is true and the method is blank. Review existing accounts that already have the flag set.
+
+## Components To Deactivate
+None. The listed automation does not duplicate the behaviour this project introduces. No deactivation candidates were found.

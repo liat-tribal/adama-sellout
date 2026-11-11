@@ -1,0 +1,1136 @@
+<template>
+    <lightning-card title="Sellout Import Manager" icon-name="standard:orders">
+        <!-- Header Actions -->
+        <div slot="actions">
+            <lightning-button
+                label="Import Sellout Report"
+                variant="brand"
+                onclick={handleImportClick}
+                disabled={isLoading}
+            ></lightning-button>
+        </div>
+
+        <!-- Automatic Sellout Configuration -->
+        <div class="slds-var-p-horizontal_medium slds-var-p-bottom_small">
+            <div class="slds-grid slds-wrap slds-grid_vertical-align-end slds-gutters_small">
+                <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-3">
+                    <lightning-input
+                        type="toggle"
+                        label="Automated Sellout Enabled"
+                        checked={automaticSellout}
+                        disabled={isSavingConfig}
+                        onchange={handleAutomaticToggle}
+                    ></lightning-input>
+                </div>
+                <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-3">
+                    <lightning-combobox
+                        label="Sellout Method"
+                        value={selloutMethod}
+                        options={selloutMethodOptions}
+                        required={methodRequired}
+                        disabled={isSavingConfig}
+                        onchange={handleMethodChange}
+                    ></lightning-combobox>
+                </div>
+                <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-3">
+                    <lightning-button
+                        label="Run Automated Sellout Now"
+                        onclick={handleRunAutomatedNow}
+                        disabled={runNowDisabled}
+                    ></lightning-button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Spinner -->
+        <template if:true={isLoading}>
+            <lightning-spinner alternative-text="Loading" size="small"></lightning-spinner>
+        </template>
+
+        <!-- Sellout Reports Table -->
+        <template if:true={hasReports}>
+            <div class="slds-p-around_medium report-list">
+                <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-table_fixed-layout report-table">
+                    <thead>
+                        <tr class="slds-line-height_reset">
+                            <th scope="col"><div class="slds-truncate">Report Number</div></th>
+                            <th scope="col"><div class="slds-truncate">Report Date</div></th>
+                            <th scope="col"><div class="slds-truncate">Status</div></th>
+                            <th scope="col"><div class="slds-truncate">Total Items</div></th>
+                            <th scope="col"><div class="slds-truncate">Import Date</div></th>
+                            <th scope="col"><div class="slds-truncate">Actions</div></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template for:each={reports} for:item="report">
+                            <tr key={report.Id}>
+                                <td><div class="slds-truncate">{report.Name}</div></td>
+                                <td><div class="slds-truncate">{report.SLO_Report_Date__c}</div></td>
+                                <td>
+                                    <span class={report.statusPillClass}>{report.displayStatus}</span>
+                                    <template lwc:if={report.showError}>
+                                        <div class="slds-text-body_small slds-text-color_error">{report.SLO_Error_Message__c}</div>
+                                    </template>
+                                </td>
+                                <td><div class="slds-truncate">{report.SLO_Total_Items__c}</div></td>
+                                <td><div class="slds-truncate">{report.formattedImportDate}</div></td>
+                                <td class="report-actions">
+                                    <!-- Review opens only once the background import has finished;
+                                         until then the report has only part of its rows -->
+                                    <lightning-button
+                                        label="View Items"
+                                        variant="base"
+                                        disabled={report.isProcessing}
+                                        title={report.actionTitle}
+                                        onclick={handleViewItems}
+                                        data-report-id={report.Id}
+                                        data-report-status={report.SLO_Status__c}
+                                        data-report-name={report.Name}
+                                    ></lightning-button>
+                                    <!-- Recovery is offered only on a report that is actually
+                                         stalled, so the normal flow stays View Items only -->
+                                    <template lwc:if={report.isStuck}>
+                                        <lightning-button
+                                            label="Check Status"
+                                            variant="base"
+                                            class="slds-m-left_x-small"
+                                            title={report.stuckReason}
+                                            onclick={handleCheckStatus}
+                                            data-report-id={report.Id}
+                                        ></lightning-button>
+                                    </template>
+                                    <!-- System administrators only: remove an upload and its lines,
+                                         for clearing test data. Confirmed in a dialog first. -->
+                                    <template lwc:if={canDelete}>
+                                        <lightning-button
+                                            label="Delete"
+                                            variant="base"
+                                            class="slds-m-left_x-small slds-text-color_error"
+                                            disabled={report.isProcessing}
+                                            title="Delete this report and all of its lines"
+                                            onclick={handleDeleteClick}
+                                            data-report-id={report.Id}
+                                            data-report-name={report.Name}
+                                        ></lightning-button>
+                                    </template>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </template>
+
+        <!-- No Reports Message -->
+        <template if:false={hasReports}>
+            <div class="slds-p-around_medium slds-text-align_center">
+                <p class="slds-text-color_weak">No sellout reports found. Click "Import Sellout Report" to get started.</p>
+            </div>
+        </template>
+
+        <!-- Import Modal -->
+        <template if:true={showImportModal}>
+            <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open">
+                <div class="slds-modal__container">
+                    <!-- Modal Header -->
+                    <header class="slds-modal__header">
+                        <h2 class="slds-text-heading_medium">Import Sellout Report</h2>
+                    </header>
+
+                    <!-- Modal Content -->
+                    <div class="slds-modal__content slds-p-around_medium">
+                        <!-- Waiting for the import to finish, then straight on to the lines -->
+                        <template if:true={isAwaitingReview}>
+                            <div class="slds-align_absolute-center slds-p-around_large slds-is-relative awaiting-review">
+                                <div class="slds-text-align_center">
+                                    <lightning-spinner
+                                        alternative-text="Importing"
+                                        size="medium"
+                                        variant="brand"
+                                    ></lightning-spinner>
+                                    <h3 class="slds-text-heading_small slds-m-top_large">
+                                        Checking your lines
+                                    </h3>
+                                    <p class="slds-text-body_regular slds-m-top_x-small">
+                                        {awaitingReviewMessage}
+                                    </p>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Step 1: File Upload -->
+                        <template if:true={isStepFileUpload}>
+                            <div class="slds-form-element">
+                                <label class="slds-form-element__label" for="file-upload">Upload CSV File</label>
+                                <div class="slds-form-element__control">
+                                    <lightning-input
+                                        id="file-upload"
+                                        type="file"
+                                        accept=".csv"
+                                        onchange={handleFileUpload}
+                                    ></lightning-input>
+                                    <div class="slds-form-element__help slds-m-top_x-small">
+                                        Please upload CSV files only. If you have an Excel file (.xls or .xlsx), export it as CSV before uploading.
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Step 2: Column Mapping -->
+                        <template if:true={isStepColumnMapping}>
+                            <div class="slds-form">
+                                <h3 class="slds-text-heading_small slds-m-bottom_small">Map Excel Columns</h3>
+                                <div class="slds-text-body_small slds-text-color_weak slds-m-bottom_medium">
+                                    Column mappings will be saved for this account and automatically applied to future imports.
+                                </div>
+
+                                <lightning-combobox
+                                    label="CSV Delimiter"
+                                    value={mappings.csvDelimiter}
+                                    options={delimiterOptions}
+                                    onchange={handleDelimiterChange}
+                                    data-field="csvDelimiter"
+                                    required
+                                    class="slds-m-bottom_small"
+                                ></lightning-combobox>
+                                <div class="slds-text-body_small slds-text-color_weak slds-m-bottom_medium">
+                                    {delimiterHelpText}
+                                </div>
+                                <lightning-input
+                                    type="date"
+                                    label="Start Date"
+                                    value={importStartDate}
+                                    onchange={handleStartDateChange}
+                                    class="slds-m-bottom_x-small"
+                                ></lightning-input>
+                                <div class="slds-text-body_small slds-text-color_weak slds-m-bottom_medium">
+                                    Rows dated before this are ignored. Saved for your next import.
+                                </div>
+                                <lightning-input
+                                    type="toggle"
+                                    label="Auto Accept"
+                                    checked={autoAccept}
+                                    onchange={handleAutoAcceptChange}
+                                    message-toggle-active="Create accounts, skip lines needing a fix and apply the sellout"
+                                    message-toggle-inactive="Review the lines before applying"
+                                    class="slds-m-bottom_medium"
+                                ></lightning-input>
+                                <lightning-input
+                                    type="toggle"
+                                    label="Skip Duplicates"
+                                    checked={skipDuplicates}
+                                    onchange={handleSkipDuplicatesChange}
+                                    message-toggle-active="Duplicates are skipped"
+                                    message-toggle-inactive="Duplicates go to the Duplicates section for review"
+                                    class="slds-m-bottom_medium"
+                                ></lightning-input>
+                                <lightning-combobox
+                                    label="Customer Price List"
+                                    value={priceMethod}
+                                    options={priceMethodOptions}
+                                    onchange={handlePriceMethodChange}
+                                    class="slds-m-bottom_small"
+                                ></lightning-combobox>
+                                <template if:true={isDedicatedPriceBook}>
+                                    <lightning-combobox
+                                        label="Dedicated Price Book"
+                                        value={priceBookId}
+                                        options={priceBookOptions}
+                                        onchange={handlePriceBookChange}
+                                        placeholder="Select an active price book"
+                                        class="slds-m-bottom_small"
+                                        required
+                                    ></lightning-combobox>
+                                    <template if:true={hasNoPriceBookOptions}>
+                                        <p class="slds-text-color_error slds-m-bottom_small">No active price book found for this account's country.</p>
+                                    </template>
+                                </template>
+
+                                <lightning-combobox
+                                    label="Item Date"
+                                    value={mappings.itemDate}
+                                    options={columnOptions}
+                                    onchange={handleMappingChange}
+                                    data-field="itemDate"
+                                    required
+                                ></lightning-combobox>
+
+                                <lightning-combobox
+                                    label="Product Code (EAN)"
+                                    value={mappings.productCode}
+                                    options={columnOptions}
+                                    onchange={handleMappingChange}
+                                    data-field="productCode"
+                                    required
+                                ></lightning-combobox>
+
+                                <lightning-combobox
+                                    label="Quantity"
+                                    value={mappings.quantity}
+                                    options={columnOptions}
+                                    onchange={handleMappingChange}
+                                    data-field="quantity"
+                                    required
+                                ></lightning-combobox>
+
+                                <lightning-combobox
+                                    label="Customer Account Name"
+                                    value={mappings.customerAccountName}
+                                    options={columnOptions}
+                                    onchange={handleMappingChange}
+                                    data-field="customerAccountName"
+                                    required
+                                ></lightning-combobox>
+                            </div>
+                        </template>
+
+                        <!-- Step 3: Preview -->
+                        <template if:true={isStepPreview}>
+                            <h3 class="slds-text-heading_small slds-m-bottom_small">
+                                Preview (First {previewRowCount} rows of {totalRows} total)
+                            </h3>
+                            <!-- The mapping restated in full: which file column feeds each field -->
+                            <ul class="slds-list_horizontal slds-wrap slds-m-bottom_x-small">
+                                <template for:each={mappingSummary} for:item="entry">
+                                    <li key={entry.key} class="slds-m-right_medium slds-text-body_small">
+                                        <span class="slds-text-color_weak">{entry.label}:</span>
+                                        <strong>{entry.column}</strong>
+                                    </li>
+                                </template>
+                            </ul>
+                            <p class="slds-text-body_small slds-text-color_weak slds-m-bottom_x-small">
+                                In these {previewRowCount} rows: {previewDistinctDates} distinct item date(s),
+                                {previewDistinctCustomers} customer(s), {previewDistinctProducts} product code(s).
+                            </p>
+                            <template lwc:if={previewDateWarning}>
+                                <div class="slds-notify slds-notify_alert slds-theme_alert-texture slds-theme_warning slds-m-bottom_small" role="alert">
+                                    <span class="slds-assistive-text">warning</span>
+                                    <h2 class="slds-text-heading_small">{previewDateWarning}</h2>
+                                </div>
+                            </template>
+                            <div class="preview-container">
+                                <table class="slds-table slds-table_bordered slds-table_cell-buffer">
+                                    <thead>
+                                        <tr class="slds-line-height_reset">
+                                            <th scope="col"><div class="slds-truncate">Item Date</div></th>
+                                            <th scope="col"><div class="slds-truncate">Product Code</div></th>
+                                            <th scope="col"><div class="slds-truncate">Quantity</div></th>
+                                            <th scope="col"><div class="slds-truncate">Customer Account</div></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template for:each={previewData} for:item="row">
+                                            <tr key={row.id}>
+                                                <td><div class="slds-truncate">{row.itemDate}</div></td>
+                                                <td><div class="slds-truncate">{row.productCode}</div></td>
+                                                <td><div class="slds-truncate">{row.quantity}</div></td>
+                                                <td><div class="slds-truncate">{row.customerAccountName}</div></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Modal Footer -->
+                    <footer class="slds-modal__footer">
+                        <template if:true={isStepFileUpload}>
+                            <lightning-button label="Cancel" onclick={handleCancelImport}></lightning-button>
+                        </template>
+
+                        <template if:true={isStepColumnMapping}>
+                            <lightning-button label="Cancel" onclick={handleCancelImport}></lightning-button>
+                            <lightning-button
+                                label="Next"
+                                variant="brand"
+                                onclick={handleNextToPreview}
+                                disabled={isMappingIncomplete}
+                            ></lightning-button>
+                        </template>
+
+                        <template if:true={isStepPreview}>
+                            <lightning-button label="Back" onclick={handleBackToMapping}></lightning-button>
+                            <lightning-button label="Cancel" onclick={handleCancelImport}></lightning-button>
+                            <lightning-button
+                                label="Import"
+                                variant="brand"
+                                onclick={handleConfirmImport}
+                            ></lightning-button>
+                        </template>
+
+                        <template if:true={isAwaitingReview}>
+                            <lightning-button
+                                label="Keep importing in the background"
+                                onclick={handleKeepImportingInBackground}
+                            ></lightning-button>
+                        </template>
+                    </footer>
+                </div>
+            </section>
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </template>
+
+        <!-- Items Modal -->
+        <template if:true={showItemsModal}>
+            <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open slds-modal_large sellout-review-modal">
+                <div class="slds-modal__container">
+                    <header class="slds-modal__header">
+                        <h2 class="slds-text-heading_medium">{itemsModalTitle}</h2>
+                    </header>
+
+                    <div class="slds-modal__content slds-p-around_medium">
+                        <!-- Apply Sellout Loading Overlay -->
+                        <template if:true={isApplyingSellout}>
+                            <div class="slds-align_absolute-center slds-m-vertical_large">
+                                <lightning-spinner
+                                    alternative-text="Applying sellout..."
+                                    size="medium"
+                                    variant="brand"
+                                ></lightning-spinner>
+                                <p class="slds-text-heading_small slds-m-top_small">
+                                    {applyingMessage}
+                                </p>
+                            </div>
+                        </template>
+
+                        <template if:false={isApplyingSellout}>
+                            <!-- Counts as coloured pills: the same colours the status column uses, so
+                                 the summary and the rows read as one language -->
+                            <div class="slds-grid slds-grid_vertical-align-center slds-wrap review-kpis" aria-live="polite">
+                                <span class="slds-badge slds-m-right_x-small slds-m-bottom_xx-small">Rows loaded: {totalItemCount}</span>
+                                <span class="slds-badge slds-theme_warning slds-m-right_x-small slds-m-bottom_xx-small">Account decision: {accountDecisionCount}</span>
+                                <span class="slds-badge slds-theme_error slds-m-right_x-small slds-m-bottom_xx-small">Needs a fix: {errorCount}</span>
+                                <span class="slds-badge slds-theme_success slds-m-right_x-small slds-m-bottom_xx-small">Ready: {readyCount}</span>
+                                <span class="slds-badge slds-badge_lightest slds-m-right_x-small slds-m-bottom_xx-small">Skipped: {skippedCount}</span>
+                                <span class="slds-badge slds-badge_inverse slds-m-right_x-small slds-m-bottom_xx-small">Enforced skipped: {enforcedSkippedCount}</span>
+                            </div>
+
+                            <!-- What the view now open is for, so its count is never read as a
+                                 to-do list when it is not one -->
+                            <p class="slds-text-body_small slds-text-color_weak slds-m-top_xx-small" aria-live="polite">
+                                {viewPurposeMessage}
+                            </p>
+
+                            <!-- Toolbar: which lines to show, find within them, load the rest, apply -->
+                            <div class="slds-grid slds-grid_vertical-align-end slds-wrap slds-m-top_x-small slds-m-bottom_small">
+                                <div class="slds-col slds-grow-none slds-m-right_small review-control">
+                                    <lightning-combobox
+                                        label="Show"
+                                        value={statusFilter}
+                                        options={statusFilterOptions}
+                                        onchange={handleStatusFilterChange}
+                                    ></lightning-combobox>
+                                </div>
+                                <div class="slds-col slds-grow-none slds-m-right_small review-control review-control_wide">
+                                    <lightning-input
+                                        type="search"
+                                        label="Find a line"
+                                        placeholder="Customer, product code, item number or note"
+                                        field-level-help="Searches every line in this view - the rest of a long list is loaded as you type"
+                                        value={searchTerm}
+                                        onchange={handleSearchChange}
+                                    ></lightning-input>
+                                </div>
+                                <div class="slds-col slds-grow-none slds-m-right_small">
+                                    <!-- Loads the rest of a long list in one go so the whole set can
+                                         be searched, reviewed and applied together -->
+                                    <lightning-button
+                                        label={loadAllLabel}
+                                        variant="neutral"
+                                        disabled={isLoadAllDisabled}
+                                        onclick={handleLoadAll}
+                                    ></lightning-button>
+                                </div>
+                                <div class="slds-col"></div>
+                                <template if:true={canApplySellout}>
+                                    <div class="slds-col slds-grow-none">
+                                        <lightning-button
+                                            label={applySelloutLabel}
+                                            variant="brand"
+                                            icon-name="utility:check"
+                                            onclick={handleApplySellout}
+                                            disabled={isApplySelloutDisabled}
+                                        ></lightning-button>
+                                    </div>
+                                </template>
+                            </div>
+
+                            <!-- Where the list stands, what is ticked, and what the last edit did -->
+                            <div class="slds-grid slds-wrap slds-grid_vertical-align-center slds-text-body_small slds-m-bottom_x-small" aria-live="polite">
+                                <span class="slds-text-color_weak slds-m-right_medium">{reviewRangeLabel}</span>
+                                <template lwc:if={searchLoadNotice}>
+                                    <span class="slds-m-right_medium">
+                                        <lightning-icon icon-name="utility:search" size="xx-small" alternative-text="Search" class="slds-m-right_xx-small"></lightning-icon>{searchLoadNotice}
+                                    </span>
+                                </template>
+                                <template lwc:if={showItemTable}>
+                                    <span class="slds-m-right_medium">{selectionLabel}</span>
+                                </template>
+                                <template lwc:if={saveFeedback}>
+                                    <span class="slds-text-color_success">
+                                        <lightning-icon icon-name="utility:check" variant="success" size="xx-small" class="slds-m-right_xx-small"></lightning-icon>{saveFeedback}
+                                    </span>
+                                </template>
+                            </div>
+
+                            <!-- Errors: a quiet scoped notice that says what to do, not a red wall -->
+                            <template if:true={hasErrorItems}>
+                                <div class="slds-scoped-notification slds-scoped-notification_light slds-media slds-media_center slds-m-bottom_x-small" role="status">
+                                    <div class="slds-media__figure">
+                                        <lightning-icon icon-name="utility:error" variant="error" size="small" alternative-text="Error"></lightning-icon>
+                                    </div>
+                                    <div class="slds-media__body">
+                                        <p>
+                                            {errorItemCount} line(s) need a fix - the value to correct is flagged in red on its row.
+                                            Edit it and the line re-checks itself the moment you save, becoming ready straight away.
+                                            When you apply the sellout, any line still needing a fix is skipped - you will be asked
+                                            to confirm first, so nothing is set aside without you seeing the count.
+                                        </p>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <!-- On the account-decision view, the names already left out are listed with
+                                 the ones still to decide, so the list says which is which -->
+                            <template lwc:if={showSetAsideNotice}>
+                                <div class="slds-scoped-notification slds-scoped-notification_light slds-media slds-media_center slds-m-bottom_x-small" role="status">
+                                    <div class="slds-media__figure">
+                                        <lightning-icon icon-name="utility:info" size="small" alternative-text="Information"></lightning-icon>
+                                    </div>
+                                    <div class="slds-media__body">
+                                        <p>
+                                            The lines shown as Skipped here are the customer names you chose to leave
+                                            out on the accounts step. They are not invoiced as they stand - but nothing
+                                            is final: tick one and use the actions above to create the account or point
+                                            it at an existing one, and every line carrying that name becomes ready.
+                                        </p>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <!-- Bulk account decisions: a tick stands for a customer name, so one
+                                 action settles every line carrying it, loaded or not -->
+                            <template lwc:if={showAccountDecisionBulkBar}>
+                                <div class="slds-box slds-box_x-small slds-m-bottom_x-small sellout-bulk-bar">
+                                    <p class="slds-text-body_small slds-m-bottom_x-small" aria-live="polite">
+                                        {bulkDecisionSelectionLabel}
+                                    </p>
+                                    <div class="slds-grid slds-wrap slds-grid_vertical-align-end">
+                                        <div class="slds-col slds-grow-none slds-m-right_x-small slds-m-bottom_xx-small">
+                                            <lightning-button
+                                                label="Create these accounts"
+                                                variant="brand"
+                                                icon-name="utility:add"
+                                                disabled={isBulkDecisionDisabled}
+                                                onclick={handleBulkCreateAccounts}
+                                            ></lightning-button>
+                                        </div>
+                                        <div class="slds-col slds-grow-none slds-m-right_x-small slds-m-bottom_xx-small">
+                                            <lightning-button
+                                                label="Leave these customers out"
+                                                variant="neutral"
+                                                icon-name="utility:dash"
+                                                disabled={isBulkDecisionDisabled}
+                                                onclick={handleBulkLeaveOut}
+                                            ></lightning-button>
+                                        </div>
+                                        <div class="slds-col slds-grow-none slds-m-right_x-small review-control">
+                                            <lightning-combobox
+                                                label="Or point them at an existing account"
+                                                placeholder="Choose an account"
+                                                value={bulkRemapAccountId}
+                                                options={hierarchyAccountOptions}
+                                                onchange={handleBulkRemapAccountChange}
+                                            ></lightning-combobox>
+                                        </div>
+                                        <div class="slds-col slds-grow-none slds-m-bottom_xx-small">
+                                            <lightning-button
+                                                label="Apply account"
+                                                variant="neutral"
+                                                disabled={isBulkRemapDisabled}
+                                                onclick={handleBulkRemap}
+                                            ></lightning-button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <!-- Bulk corrections: one value written to every ticked line, each
+                                 re-checked immediately, as a single cell edit would be -->
+                            <template lwc:if={showNeedsFixBulkBar}>
+                                <div class="slds-box slds-box_x-small slds-m-bottom_x-small sellout-bulk-bar">
+                                    <p class="slds-text-body_small slds-m-bottom_x-small" aria-live="polite">
+                                        {bulkFixSelectionLabel}
+                                    </p>
+                                    <div class="slds-grid slds-wrap slds-grid_vertical-align-end">
+                                        <div class="slds-col slds-grow-none slds-m-right_x-small review-control">
+                                            <lightning-input
+                                                type="text"
+                                                label="Correct the Product Code (EAN) on all selected lines"
+                                                value={bulkProductCode}
+                                                onchange={handleBulkProductCodeChange}
+                                            ></lightning-input>
+                                        </div>
+                                        <div class="slds-col slds-grow-none slds-m-right_large slds-m-bottom_xx-small">
+                                            <lightning-button
+                                                label="Apply product code"
+                                                variant="brand"
+                                                disabled={isBulkProductEditDisabled}
+                                                onclick={handleBulkProductCodeApply}
+                                            ></lightning-button>
+                                        </div>
+                                        <div class="slds-col slds-grow-none slds-m-right_x-small review-control">
+                                            <lightning-input
+                                                type="text"
+                                                label="Correct the Customer Account Name on all selected lines"
+                                                value={bulkCustomerName}
+                                                onchange={handleBulkCustomerNameChange}
+                                            ></lightning-input>
+                                        </div>
+                                        <div class="slds-col slds-grow-none slds-m-bottom_xx-small">
+                                            <lightning-button
+                                                label="Apply customer name"
+                                                variant="brand"
+                                                disabled={isBulkNameEditDisabled}
+                                                onclick={handleBulkCustomerNameApply}
+                                            ></lightning-button>
+                                        </div>
+                                        <div class="slds-col slds-grow-none slds-m-left_large slds-m-bottom_xx-small">
+                                            <lightning-button
+                                                label="Enforced Skip"
+                                                variant="destructive-text"
+                                                icon-name="utility:ban"
+                                                disabled={isEnforceSkipDisabled}
+                                                onclick={handleEnforceSkip}
+                                            ></lightning-button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <template lwc:if={showDuplicatesBar}>
+                                <div class="slds-box slds-box_x-small slds-m-bottom_x-small sellout-bulk-bar">
+                                    <p class="slds-text-body_small slds-m-bottom_x-small">
+                                        Edit a duplicate line below to process it (it moves to Ready), or skip them all.
+                                    </p>
+                                    <lightning-button
+                                        label="Enforce Skip"
+                                        variant="destructive-text"
+                                        icon-name="utility:ban"
+                                        disabled={isEnforceSkipDuplicatesDisabled}
+                                        onclick={handleEnforceSkipDuplicates}
+                                    ></lightning-button>
+                                </div>
+                            </template>
+
+                            <!-- What the last bulk action did, beside the list rather than as a toast -->
+                            <template lwc:if={bulkFeedback}>
+                                <p class="slds-text-body_small slds-text-color_success slds-m-bottom_x-small" aria-live="polite">
+                                    <lightning-icon icon-name="utility:check" variant="success" size="xx-small" class="slds-m-right_xx-small"></lightning-icon>{bulkFeedback}
+                                </p>
+                            </template>
+
+                            <template lwc:if={isBulkWorking}>
+                                <p class="slds-text-body_small slds-text-color_weak slds-m-bottom_x-small" aria-live="polite">
+                                    <template lwc:if={bulkProgress}>{bulkProgress}</template>
+                                    <template lwc:else>Applying to the selected lines…</template>
+                                </p>
+                            </template>
+
+                            <!-- How to read and work the table -->
+                            <p class="slds-text-body_small slds-text-color_weak slds-m-bottom_x-small review-legend">
+                                <lightning-icon icon-name="utility:error" variant="error" size="xx-small" class="slds-m-right_xx-small"></lightning-icon>the value to correct
+                                <span class="slds-m-left_medium"><lightning-icon icon-name="utility:warning" variant="warning" size="xx-small" class="slds-m-right_xx-small"></lightning-icon>needs your decision</span>
+                                <span class="slds-m-left_medium"><lightning-icon icon-name="utility:edit" size="xx-small" class="slds-m-right_xx-small"></lightning-icon>hover a cell and click the pencil, or double-click it, to edit - Enter saves</span>
+                            </p>
+
+                            <template if:true={hasNoActionItems}>
+                                <p class="slds-text-body_small slds-text-color_weak slds-m-bottom_x-small" aria-live="polite">
+                                    {noActionMessage}
+                                </p>
+                            </template>
+                        </template>
+
+                        <!-- An empty list is explained in words rather than shown as a blank grid -->
+                        <template lwc:if={showEmptyState}>
+                            <div class="slds-box slds-theme_shade slds-text-align_center slds-m-bottom_small" aria-live="polite">
+                                <p class="slds-text-body_regular">{emptyListMessage}</p>
+                            </div>
+                        </template>
+
+                        <!-- Rows stream in on scroll so a large report opens as fast as a small one. Each
+                             cell edit saves itself, so there is no save bar to find at the bottom. -->
+                        <template lwc:if={showItemTable}>
+                            <div class="slds-scrollable_y sellout-item-table">
+                                <lightning-datatable
+                                    key-field="Id"
+                                    data={visibleItems}
+                                    columns={itemColumns}
+                                    min-column-width="90"
+                                    wrap-text-max-lines="3"
+                                    suppress-bottom-bar
+                                    oncellchange={handleCellChange}
+                                    onsave={handleItemSave}
+                                    draft-values={draftValues}
+                                    selected-rows={selectedRowIds}
+                                    onrowselection={handleRowSelection}
+                                    sorted-by={sortedBy}
+                                    sorted-direction={sortedDirection}
+                                    onsort={handleSort}
+                                    enable-infinite-loading={hasMoreToLoad}
+                                    load-more-offset={loadMoreOffset}
+                                    onloadmore={handleLoadMore}
+                                ></lightning-datatable>
+                            </div>
+                        </template>
+                    </div>
+
+                    <footer class="slds-modal__footer">
+                        <lightning-button label="Close" onclick={handleCloseItemsModal}></lightning-button>
+                    </footer>
+                </div>
+            </section>
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </template>
+
+        <!-- Completed Report Summary - read only, so a finished sellout cannot be applied again -->
+        <template lwc:if={showSummaryModal}>
+            <section
+                role="dialog"
+                tabindex="-1"
+                aria-modal="true"
+                aria-labelledby="summary-heading"
+                class="slds-modal slds-fade-in-open"
+            >
+                <div class="slds-modal__container">
+                    <header class="slds-modal__header">
+                        <h2 id="summary-heading" class="slds-text-heading_medium">Sellout Results</h2>
+                    </header>
+
+                    <div class="slds-modal__content slds-p-around_medium">
+                        <template lwc:if={hasSummary}>
+                            <p class="slds-m-bottom_medium">
+                                This sellout has already been applied, so it is shown as a record of
+                                what was done and can no longer be changed.
+                            </p>
+                            <dl class="slds-dl_horizontal">
+                                <dt class="slds-dl_horizontal__label">Report</dt>
+                                <dd class="slds-dl_horizontal__detail">{summary.reportName}</dd>
+                                <dt class="slds-dl_horizontal__label">Rows loaded</dt>
+                                <dd class="slds-dl_horizontal__detail">{summary.totalItems}</dd>
+                                <dt class="slds-dl_horizontal__label">Invoices created</dt>
+                                <dd class="slds-dl_horizontal__detail">{summary.invoicesCreated}</dd>
+                                <dt class="slds-dl_horizontal__label">Lines invoiced</dt>
+                                <dd class="slds-dl_horizontal__detail">{summary.linesInvoiced}</dd>
+                                <dt class="slds-dl_horizontal__label">Duplicates skipped</dt>
+                                <dd class="slds-dl_horizontal__detail">{summary.duplicatesSkipped}</dd>
+                                <dt class="slds-dl_horizontal__label">Enforced skipped</dt>
+                                <dd class="slds-dl_horizontal__detail">{summary.enforcedSkipped}</dd>
+                                <dt class="slds-dl_horizontal__label">Accounts created</dt>
+                                <dd class="slds-dl_horizontal__detail">{summary.accountsCreated}</dd>
+                            </dl>
+                        </template>
+                    </div>
+
+                    <footer class="slds-modal__footer">
+                        <lightning-button
+                            label="Review Lines"
+                            icon-name="utility:preview"
+                            title="Review every line, including the skipped ones, without changing anything"
+                            onclick={handleViewLockedLines}
+                        ></lightning-button>
+                        <lightning-button label="Close" onclick={handleCloseSummaryModal}></lightning-button>
+                    </footer>
+                </div>
+            </section>
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </template>
+
+        <!-- Lines of an Auto Accepted report - read only, nothing can be edited or applied -->
+        <template lwc:if={showLockedLinesModal}>
+            <section
+                role="dialog"
+                tabindex="-1"
+                aria-modal="true"
+                aria-labelledby="locked-lines-heading"
+                class="slds-modal slds-fade-in-open slds-modal_large sellout-review-modal"
+            >
+                <div class="slds-modal__container">
+                    <header class="slds-modal__header">
+                        <h2 id="locked-lines-heading" class="slds-text-heading_medium">
+                            <lightning-icon icon-name="utility:lock" size="x-small" class="slds-m-right_x-small"></lightning-icon>{currentReportName} - Review Lines (read only)
+                        </h2>
+                    </header>
+                    <div class="slds-modal__content slds-p-around_medium">
+                        <p class="slds-text-body_small slds-text-color_weak slds-m-bottom_small">
+                            {lockedLinesNotice}
+                        </p>
+                        <template lwc:if={hasLockedItems}>
+                            <div class="slds-grid slds-grid_vertical-align-end slds-wrap slds-m-bottom_small">
+                                <div class="slds-col slds-grow-none slds-m-right_small review-control">
+                                    <lightning-combobox
+                                        label="Show"
+                                        value={lockedStatusFilter}
+                                        options={lockedStatusOptions}
+                                        onchange={handleLockedStatusChange}
+                                    ></lightning-combobox>
+                                </div>
+                                <div class="slds-col slds-grow-none slds-m-right_small review-control review-control_wide">
+                                    <lightning-input
+                                        type="search"
+                                        label="Find a line"
+                                        placeholder="Customer, product code, item number or note"
+                                        value={lockedSearchTerm}
+                                        onchange={handleLockedSearchChange}
+                                    ></lightning-input>
+                                </div>
+                                <span class="slds-text-body_small slds-text-color_weak slds-m-bottom_xx-small" aria-live="polite">{lockedRangeLabel}</span>
+                            </div>
+                            <template lwc:if={hasFilteredLockedItems}>
+                                <div class="slds-scrollable_y sellout-item-table">
+                                    <lightning-datatable
+                                        key-field="Id"
+                                        data={filteredLockedItems}
+                                        columns={lockedColumns}
+                                        min-column-width="90"
+                                        wrap-text-max-lines="3"
+                                        hide-checkbox-column
+                                    ></lightning-datatable>
+                                </div>
+                            </template>
+                            <template lwc:else>
+                                <div class="slds-box slds-theme_shade slds-text-align_center">No lines match this view.</div>
+                            </template>
+                        </template>
+                        <template lwc:else>
+                            <p>No lines were stored for this report.</p>
+                        </template>
+                    </div>
+                    <footer class="slds-modal__footer">
+                        <lightning-button
+                            label="Export to CSV"
+                            icon-name="utility:download"
+                            onclick={handleExportLockedLines}
+                            disabled={isLockedExportDisabled}
+                            class="slds-m-right_x-small"
+                        ></lightning-button>
+                        <lightning-button label="Close" onclick={handleCloseLockedLines}></lightning-button>
+                    </footer>
+                </div>
+            </section>
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </template>
+
+        <!-- Delete confirmation - system administrators only, for clearing test uploads. Says what
+             is about to go and warns when invoices were created from the report, since those stay. -->
+        <template lwc:if={showDeleteModal}>
+            <section
+                role="dialog"
+                tabindex="-1"
+                aria-modal="true"
+                aria-labelledby="delete-heading"
+                class="slds-modal slds-fade-in-open"
+            >
+                <div class="slds-modal__container">
+                    <header class="slds-modal__header">
+                        <h2 id="delete-heading" class="slds-text-heading_medium">Delete Sellout Report</h2>
+                    </header>
+
+                    <div class="slds-modal__content slds-p-around_medium">
+                        <p class="slds-m-bottom_small">
+                            This deletes <strong>{deleteTarget.name}</strong> and all of its
+                            <strong>{deleteLineSummary}</strong>. The report disappears from this list
+                            and its lines can no longer be reviewed or applied.
+                        </p>
+                        <template lwc:if={deleteKeepsInvoices}>
+                            <div
+                                class="slds-scoped-notification slds-media slds-media_center slds-theme_warning slds-m-bottom_small"
+                                role="status"
+                            >
+                                <div class="slds-media__figure">
+                                    <lightning-icon icon-name="utility:warning" size="small" alternative-text="Warning"></lightning-icon>
+                                </div>
+                                <div class="slds-media__body">
+                                    <p>{deleteInvoiceWarning}</p>
+                                </div>
+                            </div>
+                        </template>
+                        <template lwc:if={deleteProgress}>
+                            <p class="slds-text-color_weak" aria-live="polite">{deleteProgress}</p>
+                        </template>
+                    </div>
+
+                    <footer class="slds-modal__footer">
+                        <lightning-button
+                            label="Cancel"
+                            onclick={handleDeleteCancel}
+                            disabled={isDeleting}
+                        ></lightning-button>
+                        <lightning-button
+                            label="Delete Report"
+                            variant="destructive"
+                            class="slds-m-left_x-small"
+                            onclick={handleDeleteConfirm}
+                            disabled={isDeleting}
+                        ></lightning-button>
+                    </footer>
+                </div>
+            </section>
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </template>
+
+        <!-- Asks before the lines that still need a fix are set aside, naming the exact count so the
+             user can go back and correct them instead -->
+        <template lwc:if={showUncorrectedModal}>
+            <section
+                role="dialog"
+                tabindex="-1"
+                aria-modal="true"
+                aria-labelledby="uncorrected-heading"
+                class="slds-modal slds-fade-in-open"
+            >
+                <div class="slds-modal__container">
+                    <header class="slds-modal__header">
+                        <h2 id="uncorrected-heading" class="slds-text-heading_medium">Lines Still Need a Fix</h2>
+                    </header>
+
+                    <div class="slds-modal__content slds-p-around_medium">
+                        <p class="slds-m-bottom_small">{uncorrectedConfirmMessage}</p>
+                        <p class="slds-text-color_weak">
+                            Skipped lines are kept on the report with a note, so you can see what was
+                            left out. Choose Cancel to correct the product codes first.
+                        </p>
+                    </div>
+
+                    <footer class="slds-modal__footer">
+                        <lightning-button
+                            label="Cancel"
+                            onclick={handleCancelUncorrected}
+                        ></lightning-button>
+                        <lightning-button
+                            label="Skip Them and Continue"
+                            variant="brand"
+                            class="slds-m-left_x-small"
+                            onclick={handleConfirmUncorrected}
+                        ></lightning-button>
+                    </footer>
+                </div>
+            </section>
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </template>
+
+        <!-- After a product code is edited, the lines still carrying the old code are offered the
+             same correction with the whole block already proposed, so the user need not tick them -->
+        <template lwc:if={showProductSpreadModal}>
+            <section
+                role="dialog"
+                tabindex="-1"
+                aria-modal="true"
+                aria-labelledby="spread-heading"
+                class="slds-modal slds-modal_small slds-fade-in-open"
+            >
+                <div class="slds-modal__container">
+                    <header class="slds-modal__header">
+                        <h2 id="spread-heading" class="slds-text-heading_medium">Apply This Code to the Matching Lines</h2>
+                    </header>
+
+                    <div class="slds-modal__content slds-p-around_medium">
+                        <p class="slds-m-bottom_small">{productSpreadMessage}</p>
+                        <lightning-input
+                            type="checkbox"
+                            label={productSpreadOptionLabel}
+                            checked={spreadAccepted}
+                            disabled={isSpreadApplying}
+                            onchange={handleProductSpreadToggle}
+                        ></lightning-input>
+
+                        <!-- The correction can cover a large block, so the prompt stays open and
+                             says what it is doing until the lines have moved to the ready list -->
+                        <template lwc:if={isSpreadApplying}>
+                            <p class="slds-text-body_small slds-text-color_weak slds-m-top_small" aria-live="polite">
+                                {spreadProgress}
+                            </p>
+                        </template>
+                    </div>
+
+                    <footer class="slds-modal__footer">
+                        <lightning-button
+                            label="Cancel"
+                            disabled={isSpreadApplying}
+                            onclick={handleCancelProductSpread}
+                        ></lightning-button>
+                        <lightning-button
+                            label="Apply"
+                            variant="brand"
+                            class="slds-m-left_x-small"
+                            disabled={isSpreadApplying}
+                            onclick={handleConfirmProductSpread}
+                        ></lightning-button>
+                    </footer>
+                </div>
+            </section>
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </template>
+
+        <!-- Account Creation Modal -->
+        <template if:true={showAccountCreationModal}>
+            <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open">
+                <div class="slds-modal__container">
+                    <header class="slds-modal__header">
+                        <h2 class="slds-text-heading_medium">Account Not Found</h2>
+                    </header>
+
+                    <div class="slds-modal__content slds-p-around_medium">
+                        <p>Account '<strong>{currentUnmatchedAccount}</strong>' not found.</p>
+                        <p class="slds-m-top_small">This account name appears in <strong>{currentUnmatchedItemCount}</strong> sellout item(s).</p>
+                        <p class="slds-m-top_small">Would you like to create a new child account?</p>
+                    </div>
+
+                    <footer class="slds-modal__footer">
+                        <lightning-button label="No" onclick={handleDeclineAccountCreation}></lightning-button>
+                        <lightning-button
+                            label="Yes"
+                            variant="brand"
+                            onclick={handleConfirmAccountCreation}
+                        ></lightning-button>
+                    </footer>
+                </div>
+            </section>
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </template>
+
+        <!-- Activation Modal -->
+        <template if:true={showActivationModal}>
+            <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open">
+                <div class="slds-modal__container">
+                    <header class="slds-modal__header">
+                        <h2 class="slds-text-heading_medium">Inactive Account Found</h2>
+                    </header>
+
+                    <div class="slds-modal__content slds-p-around_medium">
+                        <p>Account '<strong>{currentUnmatchedAccount}</strong>' already exists but is inactive (Status: N).</p>
+                        <p class="slds-m-top_small">This account name appears in <strong>{currentUnmatchedItemCount}</strong> sellout item(s).</p>
+                        <p class="slds-m-top_small">Would you like to activate it or create a new account with a suffix?</p>
+                    </div>
+
+                    <footer class="slds-modal__footer">
+                        <lightning-button
+                            label="Create New with Suffix"
+                            onclick={handleCreateNewWithSuffix}
+                        ></lightning-button>
+                        <lightning-button
+                            label="Activate & Use"
+                            variant="brand"
+                            onclick={handleActivateAccount}
+                        ></lightning-button>
+                    </footer>
+                </div>
+            </section>
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </template>
+
+        <!-- Bulk Unmatched Resolution Modal. Serves two flows: step one of the review wizard
+             (confirm accounts, then continue to the line list) and the status-check recovery
+             path (decisions start invoicing straight away). -->
+        <template if:true={showResolveModal}>
+            <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open slds-modal_large sellout-review-modal">
+                <div class="slds-modal__container">
+                    <header class="slds-modal__header">
+                        <h2 class="slds-text-heading_medium">{resolveModalTitle}</h2>
+                    </header>
+
+                    <div class="slds-modal__content slds-p-around_medium">
+                        <p class="slds-m-bottom_small">{resolveIntroText}</p>
+
+                        <div class="slds-grid slds-grid_vertical-align-end slds-wrap slds-m-bottom_medium">
+                            <div class="slds-col slds-grow-none slds-m-right_small review-control review-control_wide">
+                                <lightning-input
+                                    type="search"
+                                    label="Find a customer name"
+                                    placeholder="Type part of a name"
+                                    value={resolveSearchTerm}
+                                    onchange={handleResolveSearchChange}
+                                ></lightning-input>
+                            </div>
+                            <div class="slds-col slds-grow-none">
+                                <lightning-button
+                                    label="Create all"
+                                    data-action="create"
+                                    onclick={handleResolveSetAll}
+                                ></lightning-button>
+                                <lightning-button
+                                    label="Skip all"
+                                    class="slds-m-left_x-small"
+                                    data-action="skip"
+                                    onclick={handleResolveSetAll}
+                                ></lightning-button>
+                            </div>
+                        </div>
+
+                        <template if:true={hasResolveRows}>
+                            <p class="slds-text-body_small slds-text-color_weak slds-m-bottom_x-small" aria-live="polite">
+                                Showing {visibleResolveRowCount} of {resolveRowCount} name(s)
+                            </p>
+                            <div class="preview-container">
+                                <table class="slds-table slds-table_bordered slds-table_cell-buffer">
+                                    <thead>
+                                        <tr class="slds-line-height_reset">
+                                            <th scope="col"><div class="slds-truncate">Customer Account Name</div></th>
+                                            <th scope="col"><div class="slds-truncate">Lines</div></th>
+                                            <th scope="col"><div class="slds-truncate">Action</div></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template for:each={visibleResolveRows} for:item="row">
+                                            <tr key={row.key}>
+                                                <td><div class="slds-truncate">{row.customerAccountName}</div></td>
+                                                <td><div class="slds-truncate">{row.itemCount}</div></td>
+                                                <td>
+                                                    <lightning-combobox
+                                                        label="Action"
+                                                        variant="label-hidden"
+                                                        value={row.action}
+                                                        options={row.actionOptions}
+                                                        data-key={row.key}
+                                                        onchange={handleResolveActionChange}
+                                                    ></lightning-combobox>
+                                                    <!-- Which existing account these lines should
+                                                         belong to, shown only for a reassign -->
+                                                    <template if:true={row.isReassign}>
+                                                        <lightning-combobox
+                                                            label="Existing account"
+                                                            variant="label-hidden"
+                                                            placeholder="Choose the account to use"
+                                                            value={row.selectedAccountId}
+                                                            options={hierarchyAccountOptions}
+                                                            data-key={row.key}
+                                                            onchange={handleResolveAccountChange}
+                                                            class="slds-m-top_x-small"
+                                                        ></lightning-combobox>
+                                                    </template>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </template>
+                    </div>
+
+                    <footer class="slds-modal__footer">
+                        <lightning-button label="Cancel" onclick={handleResolveCancel}></lightning-button>
+                        <lightning-button
+                            label={resolveSubmitLabel}
+                            variant="brand"
+                            class="slds-m-left_x-small"
+                            onclick={handleResolveSubmit}
+                            disabled={isLoading}
+                        ></lightning-button>
+                    </footer>
+                </div>
+            </section>
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </template>
+    </lightning-card>
+</template>

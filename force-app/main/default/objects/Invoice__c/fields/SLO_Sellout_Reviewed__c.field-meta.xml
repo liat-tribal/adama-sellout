@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+            <fullName>SLO_Sellout_Reviewed__c</fullName>
+            <label>Sellout Reviewed</label>
+            <description>Indicates whether this invoice has been reviewed by the SAP invoice review batch job for automated sellout processing. Prevents re-processing on subsequent batch runs.</description>
+            <type>Checkbox</type>
+            <defaultValue>false</defaultValue>
+            <trackHistory>false</trackHistory>
+            
+            <!-- Field Level Security - Visible and Editable for all profiles by default -->
+            <securityClassification>Public</securityClassification>
+            <complianceGroup>None</complianceGroup>
+        </CustomField>

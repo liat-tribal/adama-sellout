@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+            <fullName>SLO_Lines_Skipped__c</fullName>
+            <label>Invoice Lines Skipped</label>
+            <description>Run log count: number of invoice lines left out of the generated file by the daily automated job (no Order, no customer name, no product code or quantity).</description>
+            <type>Number</type>
+            <precision>18</precision>
+            <scale>0</scale>
+            <required>false</required>
+            <trackHistory>false</trackHistory>
+            
+            <!-- Field Level Security - Visible and Editable for all profiles by default -->
+            <securityClassification>Public</securityClassification>
+            <complianceGroup>None</complianceGroup>
+            
+            <unique>false</unique>
+            <externalId>false</externalId>
+        </CustomField>

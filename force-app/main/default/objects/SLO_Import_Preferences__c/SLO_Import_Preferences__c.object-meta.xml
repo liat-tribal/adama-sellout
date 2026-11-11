@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <customSettingsType>Hierarchy</customSettingsType>
+    <description>Sellout CSV import preferences. Org/profile levels are admin defaults (e.g. a country's delimiter); the user level holds each user's last choice.</description>
+    <enableFeeds>false</enableFeeds>
+    <label>Sellout Import Preferences</label>
+    <visibility>Public</visibility>
+</CustomObject>

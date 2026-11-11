@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>ARF_UserPricebookOverrides__c</fullName>
+    <description>JSON array of user-to-pricebook mappings for personal pricebook overrides. Format: [{&quot;userId&quot;: &quot;005xxx&quot;, &quot;pricebookId&quot;: &quot;01sxxx&quot;}, ...]</description>
+    <label>User Pricebook Overrides</label>
+    <length>131072</length>
+    <trackFeedHistory>false</trackFeedHistory>
+    <trackHistory>false</trackHistory>
+    <trackTrending>false</trackTrending>
+    <type>LongTextArea</type>
+    <visibleLines>5</visibleLines>
+</CustomField>

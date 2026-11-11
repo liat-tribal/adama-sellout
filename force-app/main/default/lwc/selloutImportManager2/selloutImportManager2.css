@@ -1,0 +1,113 @@
+/* The report list stays inside the card: it scrolls sideways on a narrow page instead of pushing
+   Total Items, Import Date and the row actions out of view */
+.report-list {
+    overflow-x: auto;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.report-table {
+    width: 100%;
+    min-width: 46rem;
+}
+
+.report-table td {
+    white-space: normal;
+    word-break: break-word;
+}
+
+.preview-container {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #dddbda;
+    border-radius: 0.25rem;
+}
+
+.slds-modal__container {
+    min-width: 40rem;
+}
+
+.slds-modal_large .slds-modal__container {
+    min-width: 60rem;
+    max-width: 90%;
+}
+
+/* The review screens - the accounts step and the line list - take the whole viewport. A report is
+   thousands of lines, and every row of height the modal gives back is a row the user need not
+   scroll for. The content area is a column so the table can grow to whatever height is left after
+   the banners and badges. */
+.sellout-review-modal .slds-modal__container {
+    width: 96vw;
+    max-width: none;
+    min-width: 0;
+    height: 94vh;
+    max-height: 94vh;
+    margin: 3vh auto;
+}
+
+.sellout-review-modal .slds-modal__content {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.sellout-review-modal .preview-container {
+    flex: 1 1 auto;
+    max-height: none;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* A bounded viewport for the review list: only the visible rows are laid out, and the fixed height
+   is what lets the table request the next page as the user scrolls. Inside the full-screen modal
+   it fills whatever height the banners leave. */
+.sellout-item-table {
+    height: 28rem;
+    border: 1px solid var(--slds-g-color-border-base-1, #e5e5e5);
+    border-radius: var(--slds-g-radius-border-2, 0.25rem);
+}
+
+.sellout-review-modal .sellout-item-table {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 20rem;
+}
+
+/* Toolbar controls: the view picker and the search box get a usable width instead of the
+   combobox default, and the search grows into whatever is left */
+.review-control {
+    min-width: 16rem;
+}
+
+.review-control_wide {
+    min-width: 24rem;
+    flex-grow: 1;
+}
+
+.review-kpis .slds-badge {
+    font-size: 0.8125rem;
+}
+
+.report-actions {
+    white-space: nowrap;
+}
+
+.review-legend lightning-icon {
+    vertical-align: middle;
+}
+
+/* The bulk action bar sits between the banners and the table and reads as one panel of controls,
+   tinted just enough to separate it from the list it acts on */
+.sellout-bulk-bar {
+    background-color: var(--slds-g-color-surface-container-1, #f3f3f3);
+    border: 1px solid var(--slds-g-color-border-base-1, #e5e5e5);
+    border-radius: var(--slds-g-radius-border-2, 0.25rem);
+}
+
+/* The waiting panel the upload window shows between Import and the line review. A floor height
+   keeps the window from collapsing to a thin strip while it waits. */
+.awaiting-review {
+    min-height: 12rem;
+}

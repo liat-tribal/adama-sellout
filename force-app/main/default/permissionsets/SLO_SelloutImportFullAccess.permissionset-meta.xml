@@ -1,0 +1,366 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
+            <fullName>SLO_SelloutImportFullAccess</fullName>
+            <label>Sellout Import Full Access</label>
+            <description>Full access to sellout import and SAP invoice review batch including ARF_CountrySettings__c</description>
+            
+            <!-- Object Permissions - Full CRUD permissions for custom objects -->
+            
+            <objectPermissions>
+                <allowCreate>true</allowCreate>
+                <allowDelete>true</allowDelete>
+                <allowEdit>true</allowEdit>
+                <allowRead>true</allowRead>
+                <modifyAllRecords>false</modifyAllRecords>
+                <object>SLO_Sellout_Report__c</object>
+                <viewAllRecords>false</viewAllRecords>
+            </objectPermissions>
+            
+            <objectPermissions>
+                <allowCreate>true</allowCreate>
+                <allowDelete>true</allowDelete>
+                <allowEdit>true</allowEdit>
+                <allowRead>true</allowRead>
+                <modifyAllRecords>false</modifyAllRecords>
+                <object>SLO_Sellout_Item__c</object>
+                <viewAllRecords>false</viewAllRecords>
+            </objectPermissions>
+            
+            <objectPermissions>
+                <allowCreate>true</allowCreate>
+                <allowDelete>true</allowDelete>
+                <allowEdit>true</allowEdit>
+                <allowRead>true</allowRead>
+                <modifyAllRecords>false</modifyAllRecords>
+                <object>Invoice__c</object>
+                <viewAllRecords>false</viewAllRecords>
+            </objectPermissions>
+            
+            <objectPermissions>
+                <allowCreate>true</allowCreate>
+                <allowDelete>true</allowDelete>
+                <allowEdit>true</allowEdit>
+                <allowRead>true</allowRead>
+                <modifyAllRecords>false</modifyAllRecords>
+                <object>Invoice_Line_Item__c</object>
+                <viewAllRecords>false</viewAllRecords>
+            </objectPermissions>
+
+            <objectPermissions>
+                <allowCreate>false</allowCreate>
+                <allowDelete>false</allowDelete>
+                <allowEdit>true</allowEdit>
+                <allowRead>true</allowRead>
+                <modifyAllRecords>false</modifyAllRecords>
+                <object>Account</object>
+                <viewAllRecords>false</viewAllRecords>
+            </objectPermissions>
+
+            <!-- Read-only access for pricebook-related objects -->
+            <objectPermissions>
+                <allowCreate>false</allowCreate>
+                <allowDelete>false</allowDelete>
+                <allowEdit>false</allowEdit>
+                <allowRead>true</allowRead>
+                <modifyAllRecords>false</modifyAllRecords>
+                <object>ARF_CountrySettings__c</object>
+                <viewAllRecords>false</viewAllRecords>
+            </objectPermissions>
+
+            <!-- Per-user import preferences (start date, CSV delimiter) -->
+            <objectPermissions>
+                <allowCreate>true</allowCreate>
+                <allowDelete>false</allowDelete>
+                <allowEdit>true</allowEdit>
+                <allowRead>true</allowRead>
+                <modifyAllRecords>false</modifyAllRecords>
+                <object>SLO_Import_Preferences__c</object>
+                <viewAllRecords>false</viewAllRecords>
+            </objectPermissions>
+
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>SLO_Import_Preferences__c.SLO_Start_Date__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>SLO_Import_Preferences__c.SLO_CSV_Delimiter__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+
+
+            <!-- Field Permissions - Make custom fields visible and editable based on isEditable (required fields are excluded) -->
+
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>SLO_Sellout_Report__c.SLO_Account__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>SLO_Sellout_Report__c.SLO_Price_Book__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>SLO_Sellout_Report__c.SLO_Price_Method__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>SLO_Sellout_Item__c.SLO_Source_Line_Item__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>SLO_Sellout_Report__c.SLO_Total_Items__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>SLO_Sellout_Report__c.SLO_Accounts_Created__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>SLO_Sellout_Report__c.SLO_Auto_Accepted__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>SLO_Sellout_Report__c.SLO_Lines_Processed__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>SLO_Sellout_Report__c.SLO_Lines_Skipped__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>SLO_Sellout_Report__c.SLO_Lines_Need_Fix__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>SLO_Sellout_Report__c.SLO_Import_Date__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>SLO_Sellout_Report__c.SLO_Error_Message__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>SLO_Sellout_Item__c.SLO_Sellout_Report__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>SLO_Sellout_Item__c.SLO_Processing_Status__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>SLO_Sellout_Item__c.SLO_Processing_Notes__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>SLO_Sellout_Item__c.SLO_Matched_Account__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>SLO_Sellout_Item__c.SLO_Invoice_Line_Item__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+
+            <fieldPermissions>
+
+                <editable>true</editable>
+
+                <field>Invoice__c.Invoice_Date__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+            
+            <fieldPermissions>
+                
+                <editable>true</editable>
+                
+                <field>Invoice__c.Status__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+            
+            <fieldPermissions>
+                
+                <editable>true</editable>
+                
+                <field>Invoice__c.Delivered_VN__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+            
+            <fieldPermissions>
+                
+                <editable>true</editable>
+                
+                <field>Invoice__c.Manual_Creation__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+            
+            <fieldPermissions>
+
+                <editable>true</editable>
+
+                <field>Invoice__c.Valid__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>Invoice__c.Transaction_type__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+
+            <fieldPermissions>
+
+                <editable>true</editable>
+
+                <field>Invoice_Line_Item__c.Product_Name__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+            
+            <fieldPermissions>
+                
+                <editable>true</editable>
+                
+                <field>Invoice_Line_Item__c.Quantity__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+            
+            <fieldPermissions>
+
+                <editable>true</editable>
+
+                <field>Invoice_Line_Item__c.Valid__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>Account.SLO_Sellout_Column_Mapping__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>Account.SLO_Automatic_Sellout__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>Account.SLO_Sellout_Method__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>Invoice__c.SLO_Sellout_Reviewed__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>Invoice__c.Child_Account_Non_SBO__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>Invoice__c.Usage_Company__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>Invoice_Line_Item__c.Order__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+
+            <fieldPermissions>
+                <editable>true</editable>
+                <field>Invoice_Line_Item__c.Unit_Price__c</field>
+                <readable>true</readable>
+            </fieldPermissions>
+
+            <!-- Apex Class Access - Grant access to Apex classes -->
+
+            <classAccesses>
+                <apexClass>SLO_SelloutImportController</apexClass>
+                <enabled>true</enabled>
+            </classAccesses>
+
+            <classAccesses>
+                <apexClass>SLO_SelloutDailyCsvBuilder</apexClass>
+                <enabled>true</enabled>
+            </classAccesses>
+
+            <classAccesses>
+                <apexClass>SLO_SelloutDailyAutoBatch</apexClass>
+                <enabled>true</enabled>
+            </classAccesses>
+
+            <classAccesses>
+                <apexClass>SLO_SelloutDailyAutoScheduler</apexClass>
+                <enabled>true</enabled>
+            </classAccesses>
+            <classAccesses>
+                <apexClass>SLO_SelloutFixOffsetVat</apexClass>
+                <enabled>true</enabled>
+            </classAccesses>
+
+            <classAccesses>
+                <apexClass>SLO_SelloutInvoiceReviewBatch</apexClass>
+                <enabled>true</enabled>
+            </classAccesses>
+
+            <classAccesses>
+                <apexClass>SLO_SelloutInvoiceReviewScheduler</apexClass>
+                <enabled>true</enabled>
+            </classAccesses>
+
+            <classAccesses>
+                <apexClass>SLO_SelloutItemImportBatch</apexClass>
+                <enabled>true</enabled>
+            </classAccesses>
+
+            <classAccesses>
+                <apexClass>SLO_SelloutApplyBatch</apexClass>
+                <enabled>true</enabled>
+            </classAccesses>
+
+            <classAccesses>
+                <apexClass>SLO_SelloutAccountMatcher</apexClass>
+                <enabled>true</enabled>
+            </classAccesses>
+
+
+            <!-- Run Flow Permission - Required when project has screen flows -->
+            
+            
+            <hasActivationRequired>false</hasActivationRequired>
+        </PermissionSet>

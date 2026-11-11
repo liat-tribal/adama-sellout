@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+            <fullName>SLO_Price_Book__c</fullName>
+            <label>Price Book</label>
+            <description>Price book selected for a Dedicated Price Book run of Apply Sellout. Used to price the invoice lines and reused if the run is resumed.</description>
+            <type>Lookup</type>
+            <required>false</required>
+            <referenceTo>Pricebook2</referenceTo>
+            <relationshipLabel>Sellout Reports</relationshipLabel>
+            <relationshipName>SLO_SLO_SelloutReports</relationshipName>
+            <deleteConstraint>SetNull</deleteConstraint>
+            <trackHistory>false</trackHistory>
+            
+            <!-- Field Level Security - Visible and Editable for all profiles by default -->
+            <securityClassification>Public</securityClassification>
+            <complianceGroup>None</complianceGroup>
+            <unique>false</unique>
+            <externalId>false</externalId>
+        </CustomField>

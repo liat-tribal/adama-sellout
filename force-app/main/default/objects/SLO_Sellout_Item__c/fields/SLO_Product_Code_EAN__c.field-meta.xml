@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>SLO_Product_Code_EAN__c</fullName>
+    <complianceGroup>None</complianceGroup>
+    <description>Product code (EAN) for the sellout item</description>
+    <externalId>false</externalId>
+    <label>Product Code (EAN)</label>
+    <length>255</length>
+    <required>true</required>
+    <securityClassification>Public</securityClassification>
+    <trackFeedHistory>false</trackFeedHistory>
+    <trackHistory>false</trackHistory>
+    <trackTrending>false</trackTrending>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>
