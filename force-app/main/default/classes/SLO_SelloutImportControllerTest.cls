@@ -222,7 +222,8 @@ private class SLO_SelloutImportControllerTest {
     static void applySelloutFlagsUnmatchedInactiveAndZeroRows() {
         Account parent = makeParentAccount();
         Account active = makeChildAccount(parent.Id, 'Known Shop', 'Active');
-        makeChildAccount(parent.Id, 'Old Shop', 'N');
+        makeChildAccount(parent.Id, 'Old Shop', 'Y');
+        Account legacy = makeChildAccount(parent.Id, 'Legacy Shop', 'N');
         Account grandchild = makeChildAccount(active.Id, 'Grand Shop', 'Active');
 
         SLO_Sellout_Report__c report = makeReport(parent.Id, 'Draft');
@@ -232,7 +233,8 @@ private class SLO_SelloutImportControllerTest {
         SLO_Sellout_Item__c inactive2 = makeItem(report.Id, 'Old Shop', '2', ITEM_DATE, 2, 'Pending');
         SLO_Sellout_Item__c unknown1 = makeItem(report.Id, 'Nobody', '1', ITEM_DATE, 2, 'Pending');
         SLO_Sellout_Item__c unknown2 = makeItem(report.Id, 'Nobody', '2', ITEM_DATE, 2, 'Pending');
-        insert new List<SLO_Sellout_Item__c>{ zero, matched, inactive1, inactive2, unknown1, unknown2 };
+        SLO_Sellout_Item__c legacyItem = makeItem(report.Id, 'Legacy Shop', '1', ITEM_DATE, 2, 'Pending');
+        insert new List<SLO_Sellout_Item__c>{ zero, matched, inactive1, inactive2, unknown1, unknown2, legacyItem };
 
         Test.startTest();
         SLO_SelloutImportController.ApplySelloutResult result =
@@ -241,8 +243,11 @@ private class SLO_SelloutImportControllerTest {
 
         Assert.isTrue(result.success, 'Unexpected error: ' + result.errorMessage);
         Assert.areEqual(1, result.itemsSkipped);
-        Assert.areEqual(1, result.itemsMatched);
+        Assert.areEqual(2, result.itemsMatched, 'The grandchild and the N-status account both match');
         Assert.areEqual(2, result.unmatchedItems.size(), 'One entry per inactive and per unknown name');
+        Assert.areEqual('Matched', statusOf(legacyItem.Id), 'Status N counts as active');
+        Assert.areEqual(legacy.Id,
+            [SELECT SLO_Matched_Account__c FROM SLO_Sellout_Item__c WHERE Id = :legacyItem.Id].SLO_Matched_Account__c);
         Assert.areEqual('Skipped', statusOf(zero.Id));
         Assert.areEqual('Matched', statusOf(matched.Id));
         Assert.areEqual(grandchild.Id,
@@ -629,9 +634,9 @@ private class SLO_SelloutImportControllerTest {
     @IsTest
     static void singleAccountActionsLinkTheirLines() {
         Account parent = makeParentAccount();
-        Account inactive = makeChildAccount(parent.Id, 'Old Shop', 'N');
+        Account inactive = makeChildAccount(parent.Id, 'Old Shop', 'Inactive');
         SLO_Sellout_Report__c report = makeReport(parent.Id, 'Draft');
-        SLO_Sellout_Item__c a = makeItem(report.Id, 'New Shop', '1', ITEM_DATE, 1, 'Pending_Decision');
+        SLO_Sellout_Item__c a= makeItem(report.Id, 'New Shop', '1', ITEM_DATE, 1, 'Pending_Decision');
         SLO_Sellout_Item__c b = makeItem(report.Id, 'Other Shop', '1', ITEM_DATE, 1, 'Pending_Decision');
         SLO_Sellout_Item__c c = makeItem(report.Id, 'Old Shop', '1', ITEM_DATE, 1, 'Pending_Decision');
         SLO_Sellout_Item__c d = makeItem(report.Id, 'Skip Shop', '1', ITEM_DATE, 1, 'Pending_Decision');
@@ -666,7 +671,7 @@ private class SLO_SelloutImportControllerTest {
     @IsTest
     static void bulkDecisionsActivateSkipAndQueueInvoicing() {
         Account parent = makeParentAccount();
-        Account inactive = makeChildAccount(parent.Id, 'Old Shop', 'N');
+        Account inactive = makeChildAccount(parent.Id, 'Old Shop', 'Y');
         makeProduct('123456');
         SLO_Sellout_Report__c report = makeReport(parent.Id, 'Draft');
         SLO_Sellout_Item__c toActivate = makeItem(report.Id, 'Old Shop', '123456', ITEM_DATE, 2, 'Pending_Decision');

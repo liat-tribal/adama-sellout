@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
     <fullName>Usage_Company__c</fullName>
-    <externalId>false</externalId>
     <label>Usage Company</label>
     <required>false</required>
     <trackFeedHistory>false</trackFeedHistory>
@@ -11,9 +10,19 @@
         <valueSetDefinition>
             <sorted>true</sorted>
             <value>
+                <fullName>3P</fullName>
+                <default>false</default>
+                <label>3P</label>
+            </value>
+            <value>
                 <fullName>ANE</fullName>
                 <default>false</default>
                 <label>ANE</label>
+            </value>
+            <value>
+                <fullName>ARG</fullName>
+                <default>false</default>
+                <label>ARG</label>
             </value>
             <value>
                 <fullName>AU</fullName>

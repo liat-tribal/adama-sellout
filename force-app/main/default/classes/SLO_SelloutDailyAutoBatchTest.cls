@@ -181,6 +181,111 @@ private with sharing class SLO_SelloutDailyAutoBatchTest {
         ], 'A second run does not duplicate the report');
     }
 
+    private static Account makeChild(Account parentAccount, String name, String status) {
+        Account child = new Account(
+            Name = name, ParentId = parentAccount.Id, Status__c = status,
+            BillingStreet = '1 Rue Test', BillingCity = 'Paris',
+            BillingCountryCode = 'FR', BillingPostalCode = '75001'
+        );
+        // Same-name accounts are intentional in tests, so bypass the duplicate rules
+        Database.DMLOptions dmlOptions = new Database.DMLOptions();
+        dmlOptions.DuplicateRuleHeader.allowSave = true;
+        Database.insert(child, dmlOptions);
+        return child;
+    }
+
+    private static Order makeOrderOnInvoice(Account parentAccount, String customerName, Integer lineNo) {
+        Order ord = new Order(
+            AccountId = parentAccount.Id, Status = orderStatus(), EffectiveDate = Date.today(),
+            Customer_name_Description__c = customerName
+        );
+        insert ord;
+        insert new Invoice_Line_Item__c(
+            Invoice_Number__c = [SELECT Id FROM Invoice__c WHERE Name = 'DAILY-1'].Id, Order__c = ord.Id,
+            Product_Name__c = 'SKU-X' + lineNo, Quantity__c = 1, Valid__c = true
+        );
+        return ord;
+    }
+
+    private static Id childOf(Order ord) {
+        return [SELECT Child_Account_Non_SBO__c FROM Order WHERE Id = :ord.Id].Child_Account_Non_SBO__c;
+    }
+
+    @isTest
+    static void orderChildAccountPrefersActiveAndMatchesInvoiceAccount() {
+        Account parentAccount = parent();
+        // The inactive account is created first, so an org-wide name query would return it first
+        Account inactive = makeChild(parentAccount, 'NORD NEGOCE', 'Y');
+        Account active = makeChild(parentAccount, 'NORD NEGOCE', 'N');
+        Order ord = makeOrderOnInvoice(parentAccount, ' NORD NEGOCE ', 1);
+
+        Test.startTest();
+        Database.executeBatch(new SLO_SelloutDailyAutoBatch(), SLO_SelloutDailyAutoBatch.SCOPE_SIZE);
+        Test.stopTest();
+
+        Id written = childOf(ord);
+        System.assertEquals(active.Id, written, 'The active account wins over the inactive one');
+        System.assertNotEquals(inactive.Id, written);
+        System.assertEquals(
+            SLO_SelloutAccountMatcher.resolve(parentAccount.Id, new Set<String>{ 'NORD NEGOCE' })
+                .get(SLO_SelloutImportController.nameKey('NORD NEGOCE')).accountId,
+            written, 'Order and invoice lines use the same account'
+        );
+    }
+
+    @isTest
+    static void orderChildAccountUsesInactiveWhenOnlyInactiveExists() {
+        Account parentAccount = parent();
+        Account inactive = makeChild(parentAccount, 'Old Customer', 'Inactive');
+        Order ord = makeOrderOnInvoice(parentAccount, 'Old Customer', 1);
+
+        Test.startTest();
+        Database.executeBatch(new SLO_SelloutDailyAutoBatch(), SLO_SelloutDailyAutoBatch.SCOPE_SIZE);
+        Test.stopTest();
+
+        System.assertEquals(inactive.Id, childOf(ord));
+    }
+
+    @isTest
+    static void orderChildAccountCreatedWhenNoMatch() {
+        Account parentAccount = parent();
+        Order ord = makeOrderOnInvoice(parentAccount, 'Brand New Customer', 1);
+
+        Test.startTest();
+        Database.executeBatch(new SLO_SelloutDailyAutoBatch(), SLO_SelloutDailyAutoBatch.SCOPE_SIZE);
+        Test.stopTest();
+
+        Id written = childOf(ord);
+        System.assertNotEquals(null, written);
+        Account created = [SELECT Name, ParentId FROM Account WHERE Id = :written];
+        System.assertEquals(
+            SLO_SelloutImportController.buildSelloutAccountName('Brand New Customer', parentAccount.Name),
+            created.Name
+        );
+        System.assertEquals(parentAccount.Id, created.ParentId);
+    }
+
+    @isTest
+    static void orderChildAccountUnchangedForDistributorCustomerAndWhenAlreadySet() {
+        Account parentAccount = parent();
+        Account existing = makeChild(parentAccount, 'Preset Customer', 'Active');
+        Order distributorOrder = makeOrderOnInvoice(parentAccount, '  daily PARENT ', 1);
+        Order presetOrder = makeOrderOnInvoice(parentAccount, 'Preset Customer', 2);
+        Account other = makeChild(parentAccount, 'Other Child', 'Active');
+        presetOrder.Child_Account_Non_SBO__c = other.Id;
+        update presetOrder;
+
+        Test.startTest();
+        Database.executeBatch(new SLO_SelloutDailyAutoBatch(), SLO_SelloutDailyAutoBatch.SCOPE_SIZE);
+        Test.stopTest();
+
+        System.assertEquals(null, childOf(distributorOrder), 'Distributor-as-customer leaves the Order unchanged');
+        System.assertEquals(0, [SELECT COUNT() FROM Account WHERE Name LIKE 'daily PARENT%Sellout%'],
+            'No account is created for the distributor itself');
+        System.assertEquals(other.Id, childOf(presetOrder), 'A filled Order field is never overwritten');
+        System.assertNotEquals(null, existing.Id);
+    }
+
     @isTest
     static void batchSkipsAccountWithWrongMethodAndSendsNoEmail() {
         Account parentAccount = parent();

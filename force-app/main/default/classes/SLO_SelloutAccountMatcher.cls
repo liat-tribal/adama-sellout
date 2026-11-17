@@ -36,66 +36,61 @@ public with sharing class SLO_SelloutAccountMatcher {
             return result;
         }
 
-        // Trim and normalize the customer account name for comparison
-        String normalizedCustomerName = customerAccountName.trim();
+        Map<String, MatchResult> resolved = resolve(mainAccountId, new Set<String>{ customerAccountName });
+        MatchResult found = resolved.get(SLO_SelloutImportController.nameKey(customerAccountName));
+        return found != null ? found : result;
+    }
 
-        // Step 1: Check main account match
-        List<Account> mainAccounts = [
-            SELECT Id, Name
-            FROM Account
-            WHERE Id = :mainAccountId
-            LIMIT 1
-        ];
+    /**
+     * @description Whether an Account.Status__c value means inactive. Stored values 'Y' and
+     * 'Inactive' are inactive; 'N', 'Active', 'Actif', blank and anything else are active.
+     * @param status Stored Status__c value
+     * @return True when the account is inactive
+     */
+    public static Boolean isInactive(String status) {
+        if (String.isBlank(status)) {
+            return false;
+        }
+        String trimmed = status.trim();
+        return trimmed.equalsIgnoreCase('Y') || trimmed.equalsIgnoreCase('Inactive');
+    }
 
-        if (!mainAccounts.isEmpty() &&
-            mainAccounts[0].Name.trim().equalsIgnoreCase(normalizedCustomerName)) {
-            result.accountId = mainAccounts[0].Id;
-            result.matchType = 'main';
-            result.accountName = mainAccounts[0].Name;
-            return result;
+    /**
+     * @description The single matching rule: resolve customer names to accounts inside the hierarchy
+     * of the main account (itself, children, grandchildren with the same billing country). Active
+     * accounts are searched first, inactive ones only when no active account answers; at each level an
+     * exact name beats a _Sellout suffix name, and ties go to the oldest account (CreatedDate, Id).
+     * @param mainAccountId The main account whose hierarchy is searched
+     * @param customerNames Customer names to resolve
+     * @return Name key (SLO_SelloutImportController.nameKey) to MatchResult; unmatched names are absent
+     */
+    public static Map<String, MatchResult> resolve(Id mainAccountId, Set<String> customerNames) {
+        Map<String, MatchResult> results = new Map<String, MatchResult>();
+        if (mainAccountId == null || customerNames == null || customerNames.isEmpty()) {
+            return results;
         }
 
-        // Step 2: Check child accounts (ParentId = main account)
-        List<Account> childAccounts = [
-            SELECT Id, Name
-            FROM Account
-            WHERE ParentId = :mainAccountId
-        ];
+        List<Account> hierarchy = SLO_SelloutImportController.getHierarchyAccounts(mainAccountId);
+        Map<Id, Account> accountsById = new Map<Id, Account>(hierarchy);
+        Map<String, Id> nameToId = new Map<String, Id>();
+        Map<String, String> nameToStatus = new Map<String, String>();
+        SLO_SelloutImportController.buildAccountNameMaps(hierarchy, nameToId, nameToStatus);
 
-        for (Account child : childAccounts) {
-            if (child.Name.trim().equalsIgnoreCase(normalizedCustomerName)) {
-                result.accountId = child.Id;
-                result.matchType = 'child';
-                result.accountName = child.Name;
-                return result;
+        for (String customerName : customerNames) {
+            String key = SLO_SelloutImportController.nameKey(customerName);
+            Id accountId = nameToId.get(key);
+            if (String.isBlank(key) || accountId == null) {
+                continue;
             }
+            Account matched = accountsById.get(accountId);
+            MatchResult result = new MatchResult();
+            result.accountId = matched.Id;
+            result.accountName = matched.Name;
+            result.matchType = matched.Id == mainAccountId ? 'main'
+                : (matched.ParentId == mainAccountId ? 'child' : 'grandchild');
+            results.put(key, result);
         }
-
-        // Step 3: Check grandchild accounts (ParentId IN child account IDs)
-        if (!childAccounts.isEmpty()) {
-            Set<Id> childAccountIds = new Set<Id>();
-            for (Account child : childAccounts) {
-                childAccountIds.add(child.Id);
-            }
-
-            List<Account> grandchildAccounts = [
-                SELECT Id, Name
-                FROM Account
-                WHERE ParentId IN :childAccountIds
-            ];
-
-            for (Account grandchild : grandchildAccounts) {
-                if (grandchild.Name.trim().equalsIgnoreCase(normalizedCustomerName)) {
-                    result.accountId = grandchild.Id;
-                    result.matchType = 'grandchild';
-                    result.accountName = grandchild.Name;
-                    return result;
-                }
-            }
-        }
-
-        // No match found
-        return result;
+        return results;
     }
 
     /**

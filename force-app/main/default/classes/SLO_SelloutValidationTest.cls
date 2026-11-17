@@ -580,16 +580,35 @@ private class SLO_SelloutValidationTest {
             BillingStreet = 'Rue de Test 1',
             BillingCity = 'Paris',
             BillingPostalCode = '75001',
+            Status__c = 'Y'
+        );
+        insert new Account(
+            Name = 'Delta Shop',
+            ParentId = parent.Id,
+            BillingCountry = 'France',
+            BillingStreet = 'Rue de Test 1',
+            BillingCity = 'Paris',
+            BillingPostalCode = '75001',
+            Status__c = 'Inactive'
+        );
+        insert new Account(
+            Name = 'Legacy Shop',
+            ParentId = parent.Id,
+            BillingCountry = 'France',
+            BillingStreet = 'Rue de Test 1',
+            BillingCity = 'Paris',
+            BillingPostalCode = '75001',
             Status__c = 'N'
         );
 
         List<SLO_SelloutImportController.PicklistOption> options =
             SLO_SelloutImportController.getHierarchyAccountOptions(parent.Id);
 
-        Assert.areEqual(3, options.size(), 'The inactive account is left out');
+        Assert.areEqual(4, options.size(), 'Y and Inactive accounts are left out; N counts as active');
         Assert.areEqual('Alpha Shop', options[0].label);
         Assert.areEqual('Beta Shop', options[1].label);
-        Assert.areEqual('Parent Wholesaler', options[2].label);
+        Assert.areEqual('Legacy Shop', options[2].label);
+        Assert.areEqual('Parent Wholesaler', options[3].label);
     }
 
     @IsTest
@@ -748,7 +767,7 @@ private class SLO_SelloutValidationTest {
             BillingStreet = 'Rue de Test 1',
             BillingCity = 'Paris',
             BillingPostalCode = '75001',
-            Status__c = 'N'
+            Status__c = 'Y'
         );
         insert inactiveChild;
 

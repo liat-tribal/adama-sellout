@@ -229,14 +229,16 @@ private class SLO_SelloutApplyBatchTest {
     @IsTest
     static void matchPassHandlesBlankZeroAndInactiveRows() {
         Account parent = makeAccount('Parent Wholesaler', null, 'Active');
-        makeAccount('Old Shop', parent.Id, 'N');
+        makeAccount('Old Shop', parent.Id, 'Y');
+        Account legacy = makeAccount('Legacy Shop', parent.Id, 'N');
         makeAccount('Known Shop', parent.Id, 'Active');
         SLO_Sellout_Report__c report = makeReport(parent.Id, 'Draft');
         SLO_Sellout_Item__c blank = makeItem(report.Id, 'Cleared', '1', 1, 'Pending');
         SLO_Sellout_Item__c zero = makeItem(report.Id, 'Known Shop', '1', 0, 'Pending');
         SLO_Sellout_Item__c inactive = makeItem(report.Id, 'Old Shop', '1', 1, 'Pending');
         SLO_Sellout_Item__c known = makeItem(report.Id, 'Known Shop', '1', 1, 'Pending');
-        insert new List<SLO_Sellout_Item__c>{ blank, zero, inactive, known };
+        SLO_Sellout_Item__c legacyItem = makeItem(report.Id, 'Legacy Shop', '1', 1, 'Pending');
+        insert new List<SLO_Sellout_Item__c>{ blank, zero, inactive, known, legacyItem };
         // The customer name is required on save, so a blank one only exists in memory - its flag
         // then fails to save and is counted as an error rather than stopping the scope
         blank.SLO_Customer_Account_Name__c = null;
@@ -246,9 +248,13 @@ private class SLO_SelloutApplyBatchTest {
 
         Test.startTest();
         batch.start(null);
-        batch.execute(null, new List<SLO_Sellout_Item__c>{ blank, zero, inactive, known });
+        batch.execute(null, new List<SLO_Sellout_Item__c>{ blank, zero, inactive, known, legacyItem });
         batch.finish(null);
         Test.stopTest();
+
+        Assert.areEqual('Matched', statusOf(legacyItem.Id), 'Status N counts as active');
+        Assert.areEqual(legacy.Id,
+            [SELECT SLO_Matched_Account__c FROM SLO_Sellout_Item__c WHERE Id = :legacyItem.Id].SLO_Matched_Account__c);
 
         Assert.areEqual('Pending', statusOf(blank.Id), 'The unsaved row is left as it was');
         Assert.areEqual('Skipped', statusOf(zero.Id));

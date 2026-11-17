@@ -172,7 +172,7 @@ public with sharing class SLO_SelloutDailyAutoBatch
         }
     }
 
-    // Same matching and creation rules as SLO_SelloutInvoiceReviewBatch; only empty Order fields are filled
+    // Matches through SLO_SelloutAccountMatcher.resolve (same rule as Apply Sellout); only empty Order fields are filled
     private void populateOrderChildAccounts(Account parent, List<Id> invoiceIds) {
         Set<Id> orderIds = new Set<Id>();
         for (Invoice_Line_Item__c line : [
@@ -191,26 +191,28 @@ public with sharing class SLO_SelloutDailyAutoBatch
             WHERE Id IN :orderIds AND Child_Account_Non_SBO__c = null
               AND Customer_name_Description__c != null
         ];
-        Set<String> candidateNames = new Set<String>();
+        // An Order whose customer is the distributor itself is left unchanged (requirement 18)
+        String parentKey = SLO_SelloutImportController.nameKey(parent.Name);
+        Set<String> names = new Set<String>();
+        Map<Id, String> orderToName = new Map<Id, String>();
         for (Order ord : orders) {
             String name = ord.Customer_name_Description__c.trim();
-            if (String.isBlank(name)) {
+            if (String.isBlank(name) || SLO_SelloutImportController.nameKey(name) == parentKey) {
                 continue;
             }
-            candidateNames.add(name);
-            candidateNames.add(name + SLO_SelloutImportController.SELLOUT_ACCOUNT_SUFFIX);
-            candidateNames.add(SLO_SelloutImportController.buildSelloutAccountName(name, parent.Name));
+            names.add(name);
+            orderToName.put(ord.Id, name);
         }
-        if (candidateNames.isEmpty()) {
+        if (names.isEmpty()) {
             return;
         }
 
-        Map<String, Id> idByLowerName = new Map<String, Id>();
-        for (Account acc : [SELECT Id, Name FROM Account WHERE Name IN :candidateNames]) {
-            String key = acc.Name.toLowerCase();
-            if (!idByLowerName.containsKey(key)) {
-                idByLowerName.put(key, acc.Id);
-            }
+        // Same hierarchy-scoped, active-first rule the invoice lines use, so Order and invoice agree
+        Map<String, SLO_SelloutAccountMatcher.MatchResult> matches =
+            SLO_SelloutAccountMatcher.resolve(parent.Id, names);
+        Map<String, Id> idByKey = new Map<String, Id>();
+        for (String key : matches.keySet()) {
+            idByKey.put(key, matches.get(key).accountId);
         }
 
         Account parentFull = [
@@ -218,25 +220,11 @@ public with sharing class SLO_SelloutDailyAutoBatch
             FROM Account WHERE Id = :parent.Id
         ];
         Map<String, Account> toCreate = new Map<String, Account>();
-        Map<Id, String> orderToName = new Map<Id, String>();
-        for (Order ord : orders) {
-            String name = ord.Customer_name_Description__c.trim();
-            if (String.isBlank(name)) {
-                continue;
-            }
-            String marked = SLO_SelloutImportController.buildSelloutAccountName(name, parent.Name);
-            Boolean found = false;
-            for (String candidate : new List<String>{
-                name, marked, name + SLO_SelloutImportController.SELLOUT_ACCOUNT_SUFFIX
-            }) {
-                if (idByLowerName.containsKey(candidate.toLowerCase())) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found && !toCreate.containsKey(marked.toLowerCase())) {
+        for (String name : names) {
+            String key = SLO_SelloutImportController.nameKey(name);
+            if (!idByKey.containsKey(key) && !toCreate.containsKey(key)) {
                 Account child = new Account(
-                    Name = marked,
+                    Name = SLO_SelloutImportController.buildSelloutAccountName(name, parent.Name),
                     ParentId = parent.Id,
                     Status__c = 'Active',
                     CurrencyIsoCode = parentFull.CurrencyIsoCode,
@@ -249,9 +237,8 @@ public with sharing class SLO_SelloutDailyAutoBatch
                 if (recordTypeId != null) {
                     child.RecordTypeId = recordTypeId;
                 }
-                toCreate.put(marked.toLowerCase(), child);
+                toCreate.put(key, child);
             }
-            orderToName.put(ord.Id, name);
         }
 
         if (!toCreate.isEmpty()) {
@@ -259,11 +246,15 @@ public with sharing class SLO_SelloutDailyAutoBatch
             dml.optAllOrNone = false;
             dml.DuplicateRuleHeader.allowSave = true;
             dml.DuplicateRuleHeader.runAsCurrentUser = true;
-            List<Account> created = toCreate.values();
+            List<String> createdKeys = new List<String>(toCreate.keySet());
+            List<Account> created = new List<Account>();
+            for (String key : createdKeys) {
+                created.add(toCreate.get(key));
+            }
             List<Database.SaveResult> results = Database.insert(created, dml);
             for (Integer i = 0; i < created.size(); i++) {
                 if (results[i].isSuccess()) {
-                    idByLowerName.put(created[i].Name.toLowerCase(), created[i].Id);
+                    idByKey.put(createdKeys[i], created[i].Id);
                 } else if (!results[i].getErrors().isEmpty()) {
                     errors.add(parent.Id + ': ' + results[i].getErrors()[0].getMessage());
                 }
@@ -276,17 +267,7 @@ public with sharing class SLO_SelloutDailyAutoBatch
             if (name == null) {
                 continue;
             }
-            Id childId = null;
-            for (String candidate : new List<String>{
-                name,
-                SLO_SelloutImportController.buildSelloutAccountName(name, parent.Name),
-                name + SLO_SelloutImportController.SELLOUT_ACCOUNT_SUFFIX
-            }) {
-                if (idByLowerName.containsKey(candidate.toLowerCase())) {
-                    childId = idByLowerName.get(candidate.toLowerCase());
-                    break;
-                }
-            }
+            Id childId = idByKey.get(SLO_SelloutImportController.nameKey(name));
             if (childId != null) {
                 toUpdate.add(new Order(Id = ord.Id, Child_Account_Non_SBO__c = childId));
             }

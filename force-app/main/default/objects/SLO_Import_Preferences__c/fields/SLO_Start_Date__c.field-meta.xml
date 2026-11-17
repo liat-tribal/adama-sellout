@@ -4,5 +4,6 @@
     <description>Rows dated before this date are ignored on import.</description>
     <label>Start Date</label>
     <required>false</required>
+    <trackTrending>false</trackTrending>
     <type>Date</type>
 </CustomField>

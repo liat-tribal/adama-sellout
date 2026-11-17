@@ -1128,7 +1128,7 @@ public with sharing class SLO_SelloutApplyBatch
 
             String customerKey = SLO_SelloutImportController.nameKey(item.SLO_Customer_Account_Name__c);
 
-            if (accountNameToId.containsKey(customerKey) && accountNameToStatus.get(customerKey) != 'N') {
+            if (accountNameToId.containsKey(customerKey) && !SLO_SelloutAccountMatcher.isInactive(accountNameToStatus.get(customerKey))) {
                 item.SLO_Matched_Account__c = accountNameToId.get(customerKey);
                 item.SLO_Processing_Status__c = 'Matched';
                 // Says plainly that nothing is wrong with this row, so the review list reads as a

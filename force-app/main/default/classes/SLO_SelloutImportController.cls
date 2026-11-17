@@ -236,29 +236,45 @@ public with sharing class SLO_SelloutImportController {
         Map<String, Id> nameToId,
         Map<String, String> nameToStatus
     ) {
-        // Pass one: exact names
-        for (Account account : accounts) {
+        // Rank per name key: active (0) before inactive (100), main (0) before child (10) before
+        // grandchild (20), exact name (+0) before suffixed name (+1). Lower wins; equal ranks keep the
+        // earlier account, and getHierarchyAccounts lists each level oldest first.
+        Map<String, Integer> bestRank = new Map<String, Integer>();
+        Id mainId = accounts.isEmpty() ? null : accounts[0].Id;
+
+        for (Integer i = 0; i < accounts.size(); i++) {
+            Account account = accounts[i];
             if (String.isBlank(account.Name)) {
                 continue;
             }
+            Integer level = i == 0 ? 0 : (account.ParentId == mainId ? 1 : 2);
+            Integer baseRank = (SLO_SelloutAccountMatcher.isInactive(account.Status__c) ? 100 : 0) + level * 10;
+
             String key = nameKey(account.Name);
-            if (!nameToId.containsKey(key)) {
-                nameToId.put(key, account.Id);
-                nameToStatus.put(key, account.Status__c);
+            registerCandidate(key, baseRank, account, nameToId, nameToStatus, bestRank);
+
+            String baseKey = stripSelloutSuffix(key);
+            if (baseKey != null) {
+                registerCandidate(baseKey, baseRank + 1, account, nameToId, nameToStatus, bestRank);
             }
         }
+    }
 
-        // Pass two: the suffixed accounts also answer to their base name, where nothing claims it
-        for (Account account : accounts) {
-            if (String.isBlank(account.Name)) {
-                continue;
-            }
-            String baseKey = stripSelloutSuffix(nameKey(account.Name));
-            if (baseKey == null || nameToId.containsKey(baseKey)) {
-                continue;
-            }
-            nameToId.put(baseKey, account.Id);
-            nameToStatus.put(baseKey, account.Status__c);
+    /**
+     * @description Record an account as the answer for a name key when it outranks the current one
+     */
+    private static void registerCandidate(
+        String key,
+        Integer rank,
+        Account account,
+        Map<String, Id> nameToId,
+        Map<String, String> nameToStatus,
+        Map<String, Integer> bestRank
+    ) {
+        if (!bestRank.containsKey(key) || rank < bestRank.get(key)) {
+            bestRank.put(key, rank);
+            nameToId.put(key, account.Id);
+            nameToStatus.put(key, account.Status__c);
         }
     }
 
@@ -1826,7 +1842,7 @@ public with sharing class SLO_SelloutImportController {
 
         String key = nameKey(item.SLO_Customer_Account_Name__c);
 
-        if (nameToId.containsKey(key) && nameToStatus.get(key) != 'N') {
+        if (nameToId.containsKey(key) && !SLO_SelloutAccountMatcher.isInactive(nameToStatus.get(key))) {
             item.SLO_Matched_Account__c = nameToId.get(key);
             item.SLO_Processing_Status__c = 'Matched';
             item.SLO_Processing_Notes__c = NOTE_READY;
@@ -1901,7 +1917,7 @@ public with sharing class SLO_SelloutImportController {
      */
     public static List<Account> getHierarchyAccounts(Id accountId) {
         Account current = [
-            SELECT Id, Name, BillingCountry, Status__c
+            SELECT Id, Name, ParentId, CreatedDate, BillingCountry, Status__c
             FROM Account
             WHERE Id = :accountId
             LIMIT 1
@@ -1911,20 +1927,22 @@ public with sharing class SLO_SelloutImportController {
         List<Account> hierarchy = new List<Account>{ current };
 
         List<Account> children = [
-            SELECT Id, Name, Status__c
+            SELECT Id, Name, ParentId, CreatedDate, Status__c
             FROM Account
             WHERE ParentId = :accountId
             AND BillingCountry = :billingCountry
+            ORDER BY CreatedDate ASC, Id ASC
         ];
         hierarchy.addAll(children);
 
         Set<Id> childIds = new Map<Id, Account>(children).keySet();
         if (!childIds.isEmpty()) {
             hierarchy.addAll([
-                SELECT Id, Name, Status__c
+                SELECT Id, Name, ParentId, CreatedDate, Status__c
                 FROM Account
                 WHERE ParentId IN :childIds
                 AND BillingCountry = :billingCountry
+                ORDER BY CreatedDate ASC, Id ASC
             ]);
         }
 
@@ -2398,43 +2416,11 @@ public with sharing class SLO_SelloutImportController {
                 return result;
             }
 
-            // Get current account name and country
-            Account currentAccount = [SELECT Id, Name, BillingCountry, Status__c FROM Account WHERE Id = :currentAccountId LIMIT 1];
-            String billingCountry = currentAccount.BillingCountry;
-
-            // Get all child and grandchild accounts in the same country with Status__c
-            List<Account> childAccounts = [
-                SELECT Id, Name, Status__c
-                FROM Account
-                WHERE ParentId = :currentAccountId
-                AND BillingCountry = :billingCountry
-            ];
-            Set<Id> childAccountIds = new Set<Id>();
-            for (Account child : childAccounts) {
-                childAccountIds.add(child.Id);
-            }
-
-            List<Account> grandchildAccounts = new List<Account>();
-            if (!childAccountIds.isEmpty()) {
-                grandchildAccounts = [
-                    SELECT Id, Name, Status__c
-                    FROM Account
-                    WHERE ParentId IN :childAccountIds
-                    AND BillingCountry = :billingCountry
-                ];
-            }
-
-            // Build account map for matching (case-insensitive) with Status__c tracking. The
-            // hierarchy is passed in match-precedence order - main account, then children, then
-            // grandchildren - and each tier is matched on its exact name first and its _Sellout
-            // variant second.
+            // Shared matching rule: main account, children, grandchildren (same billing country),
+            // active accounts before inactive, oldest first on ties
             Map<String, Id> accountNameToIdMap = new Map<String, Id>();
             Map<String, String> accountNameToStatusMap = new Map<String, String>();
-
-            List<Account> hierarchyAccounts = new List<Account>{ currentAccount };
-            hierarchyAccounts.addAll(childAccounts);
-            hierarchyAccounts.addAll(grandchildAccounts);
-            buildAccountNameMaps(hierarchyAccounts, accountNameToIdMap, accountNameToStatusMap);
+            buildAccountNameMaps(getHierarchyAccounts((Id) currentAccountId), accountNameToIdMap, accountNameToStatusMap);
 
             // Match accounts for each item - detect inactive accounts
             List<SLO_Sellout_Item__c> itemsToUpdate = new List<SLO_Sellout_Item__c>();
@@ -2462,8 +2448,8 @@ public with sharing class SLO_SelloutImportController {
                     Id matchedAccountId = accountNameToIdMap.get(customerName);
                     String accountStatus = accountNameToStatusMap.get(customerName);
 
-                    // Check if account is inactive (Status__c = 'N')
-                    if (accountStatus == 'N') {
+                    // Check if account is inactive (Status__c = 'Y' or 'Inactive')
+                    if (SLO_SelloutAccountMatcher.isInactive(accountStatus)) {
                         // Inactive account - track for user decision
                         String originalName = item.SLO_Customer_Account_Name__c.trim();
 
@@ -5848,7 +5834,7 @@ public with sharing class SLO_SelloutImportController {
             }
 
             // A name an active account answers to needs no decision, whatever the row's status
-            if (nameToId.containsKey(key) && nameToStatus.get(key) != 'N') {
+            if (nameToId.containsKey(key) && !SLO_SelloutAccountMatcher.isInactive(nameToStatus.get(key))) {
                 continue;
             }
 
@@ -5888,7 +5874,7 @@ public with sharing class SLO_SelloutImportController {
 
         Map<String, PicklistOption> sortedOptions = new Map<String, PicklistOption>();
         for (Account acc : getHierarchyAccounts((Id) accountId)) {
-            if (acc.Status__c == 'N' || String.isBlank(acc.Name)) {
+            if (SLO_SelloutAccountMatcher.isInactive(acc.Status__c) || String.isBlank(acc.Name)) {
                 continue;
             }
             sortedOptions.put(
