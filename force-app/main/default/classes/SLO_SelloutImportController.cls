@@ -4281,7 +4281,10 @@ public with sharing class SLO_SelloutImportController {
         prefs.skipDuplicates = true;
 
         SLO_Import_Preferences__c stored = SLO_Import_Preferences__c.getValues(UserInfo.getUserId());
-        if (stored == null) {
+        // saveImportSettings always stores a price method. A record without one was saved before these
+        // settings existed (start date and delimiter only); its new checkboxes are not the user's
+        // choice, so it gets today's defaults.
+        if (stored == null || String.isBlank(stored.SLO_Price_Method__c)) {
             return prefs;
         }
         if (PRICE_METHODS.contains(stored.SLO_Price_Method__c)) {

@@ -49,6 +49,27 @@ private class SLO_SelloutImportPreferencesTest {
     }
 
     @IsTest
+    static void recordSavedBeforeTheseSettingsGetsDefaults() {
+        Account distributor = makeDistributor('Distributor A');
+        // Saved by the earlier version: start date and delimiter only, new checkboxes left false
+        insert new SLO_Import_Preferences__c(
+            SetupOwnerId = UserInfo.getUserId(),
+            SLO_Start_Date__c = Date.newInstance(2026, 2, 1),
+            SLO_Skip_Duplicates__c = false,
+            SLO_Auto_Accept__c = false
+        );
+
+        Test.startTest();
+        SLO_SelloutImportController.ImportPreferences prefs =
+            SLO_SelloutImportController.getImportSettings(distributor.Id);
+        Test.stopTest();
+
+        Assert.areEqual(Date.newInstance(2026, 2, 1), prefs.startDate, 'The saved start date is still used');
+        Assert.isTrue(prefs.skipDuplicates, 'Skip Duplicates was never chosen, so it stays on');
+        Assert.areEqual('Customer_Price_List', prefs.priceMethod);
+    }
+
+    @IsTest
     static void savedSettingsArePreFilledOnAnotherAccount() {
         Account dha = makeDistributor('Distributor DHA');
         Account inoxa = makeDistributor('Distributor INOXA');
