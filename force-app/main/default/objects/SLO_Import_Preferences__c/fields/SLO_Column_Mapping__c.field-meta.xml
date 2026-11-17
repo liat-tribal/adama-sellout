@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>SLO_Column_Mapping__c</fullName>
+    <description>The user's last column mapping (JSON), pre-filled on the next import.</description>
+    <externalId>false</externalId>
+    <label>Column Mapping</label>
+    <length>255</length>
+    <required>false</required>
+    <trackTrending>false</trackTrending>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>

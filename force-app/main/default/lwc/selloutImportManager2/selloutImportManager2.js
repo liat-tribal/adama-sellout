@@ -37,8 +37,8 @@ import getItemIdsByProductCode from '@salesforce/apex/SLO_SelloutImportControlle
 import enforceSkipItems from '@salesforce/apex/SLO_SelloutImportController.enforceSkipItems';
 import enforceSkipDuplicates from '@salesforce/apex/SLO_SelloutImportController.enforceSkipDuplicates';
 import getCountryPriceBookOptions from '@salesforce/apex/SLO_SelloutImportController.getCountryPriceBookOptions';
-import getImportPreferences from '@salesforce/apex/SLO_SelloutImportController.getImportPreferences';
-import saveImportPreferences from '@salesforce/apex/SLO_SelloutImportController.saveImportPreferences';
+import getImportSettings from '@salesforce/apex/SLO_SelloutImportController.getImportSettings';
+import saveImportSettings from '@salesforce/apex/SLO_SelloutImportController.saveImportSettings';
 
 // Rows dated before this are ignored on import unless the user has saved another start date
 const DEFAULT_START_DATE = '2026-01-01';
@@ -1020,12 +1020,16 @@ export default class SelloutImportManager2 extends LightningElement {
         this.loadImportPreferences();
     }
 
-    // Pre-fill the start date and delimiter from the user's saved preferences (falling back to the
-    // profile or org default). Runs before a file is chosen, so the first parse already uses that
-    // delimiter. A delimiter saved in this account's column mapping still overrides it afterwards,
-    // in loadSavedMapping.
+    // Pre-fill everything the user chose on their last import, on any account: start date,
+    // delimiter (country setting first, as before), price method, price book, Auto Accept and Skip
+    // Duplicates. Their own column mapping is kept for fetchSavedMapping, which prefers it over this
+    // account's saved mapping. Runs before a file is chosen, so the first parse already uses the
+    // delimiter.
     loadImportPreferences() {
-        return getImportPreferences()
+        this.userColumnMapping = null;
+        // Re-read the saved mapping on every new import, so one saved earlier in this session is used
+        this.savedMappingCache = null;
+        this.importSettingsPromise = getImportSettings({ accountId: this.recordId })
             .then(prefs => {
                 if (prefs) {
                     this.importStartDate = prefs.startDate || DEFAULT_START_DATE;
@@ -1036,14 +1040,27 @@ export default class SelloutImportManager2 extends LightningElement {
                     if (!this.fileContent) {
                         this.mappings = { ...this.mappings, csvDelimiter: prefs.csvDelimiter || ',' };
                     }
+                    this.autoAccept = prefs.autoAccept === true;
+                    this.skipDuplicates = prefs.skipDuplicates !== false;
+                    this.priceMethod = prefs.priceMethod || 'Customer_Price_List';
+                    // A saved book that is inactive or not offered here comes back empty; the user
+                    // then picks one, and the price method stays as saved
+                    this.priceBookId = prefs.priceBookId || undefined;
+                    this.userColumnMapping = prefs.columnMapping || null;
+                    if (this.isDedicatedPriceBook && this.priceBookOptions.length === 0) {
+                        this.loadPriceBookOptions();
+                    }
                 }
                 return null;
             })
             .catch(() => null);
+        return this.importSettingsPromise;
     }
 
     delimiterSource = '';
     savedMappingCache = null;
+    userColumnMapping = null;
+    importSettingsPromise = null;
 
     get delimiterHelpText() {
         if (this.delimiterSource === 'COUNTRY') {
@@ -1082,14 +1099,18 @@ export default class SelloutImportManager2 extends LightningElement {
     handlePriceMethodChange(event) {
         this.priceMethod = event.detail.value;
         if (this.isDedicatedPriceBook && this.priceBookOptions.length === 0) {
-            getCountryPriceBookOptions({ accountId: this.recordId })
-                .then(result => {
-                    this.priceBookOptions = result || [];
-                })
-                .catch(error => {
-                    console.error('Error loading price books:', error);
-                });
+            this.loadPriceBookOptions();
         }
+    }
+
+    loadPriceBookOptions() {
+        getCountryPriceBookOptions({ accountId: this.recordId })
+            .then(result => {
+                this.priceBookOptions = result || [];
+            })
+            .catch(error => {
+                console.error('Error loading price books:', error);
+            });
     }
 
     handlePriceBookChange(event) {
@@ -1100,12 +1121,22 @@ export default class SelloutImportManager2 extends LightningElement {
         return this.priceBookOptions.length === 0;
     }
 
-    // Remember the start date and delimiter for this user's next import. A failure must not
+    // Remember every choice for this user's next import, on any account. A failure must not
     // interrupt the import that has just started.
     saveUserPreferences() {
-        saveImportPreferences({
+        saveImportSettings({
             startDate: this.importStartDate || null,
-            csvDelimiter: this.mappings.csvDelimiter
+            csvDelimiter: this.mappings.csvDelimiter,
+            columnMapping: JSON.stringify({
+                itemDate: this.mappings.itemDate,
+                productCode: this.mappings.productCode,
+                quantity: this.mappings.quantity,
+                customerAccountName: this.mappings.customerAccountName
+            }),
+            priceMethod: this.priceMethod,
+            priceBookId: this.isDedicatedPriceBook ? this.priceBookId || null : null,
+            autoAccept: this.autoAccept === true,
+            skipDuplicates: this.skipDuplicates !== false
         }).catch(error => {
             console.error('Error saving import preferences:', error);
         });
@@ -1203,12 +1234,14 @@ export default class SelloutImportManager2 extends LightningElement {
             .toLowerCase();
     }
 
-    // The saved mapping is fetched once and kept so later re-parses can re-apply it
+    // The saved mapping is fetched once and kept so later re-parses can re-apply it. The user's own
+    // last mapping comes first; this account's saved mapping is the fallback.
     fetchSavedMapping() {
         if (this.savedMappingCache) {
             return Promise.resolve(this.savedMappingCache);
         }
-        return getSavedColumnMapping({ accountId: this.recordId })
+        return Promise.resolve(this.importSettingsPromise)
+            .then(() => this.userColumnMapping || getSavedColumnMapping({ accountId: this.recordId }))
             .then(mappingJson => {
                 if (!mappingJson) {
                     return null;

@@ -4249,9 +4249,101 @@ public with sharing class SLO_SelloutImportController {
         @AuraEnabled public Date startDate { get; set; }
         @AuraEnabled public String csvDelimiter { get; set; }
         @AuraEnabled public String delimiterSource { get; set; }
+        // The settings below are filled by getImportSettings only
+        @AuraEnabled public String columnMapping { get; set; }
+        @AuraEnabled public String priceMethod { get; set; }
+        @AuraEnabled public String priceBookId { get; set; }
+        @AuraEnabled public Boolean autoAccept { get; set; }
+        @AuraEnabled public Boolean skipDuplicates { get; set; }
     }
 
     private static final Date DEFAULT_START_DATE = Date.newInstance(2026, 1, 1);
+    private static final String DEFAULT_PRICE_METHOD = 'Customer_Price_List';
+    private static final Set<String> PRICE_METHODS = new Set<String>{
+        'Customer_Price_List', 'Last_Item_Price', 'Dedicated_Price_Book'
+    };
+    @TestVisible private static final Integer MAX_SAVED_MAPPING_LENGTH = 255;
+
+    /**
+     * @description Everything the running user chose on their last import, to pre-fill the import
+     * screen on any account. A user with nothing saved gets today's defaults. The saved price book is
+     * returned only while it is active and offered for the account; otherwise it is left empty and
+     * the saved price method is kept. The column mapping is only the user's own; the screen falls
+     * back to the account's saved mapping when it is empty.
+     * @param accountId The distributor account being imported
+     * @return The start date, delimiter and the user's saved settings
+     */
+    @AuraEnabled(cacheable=false)
+    public static ImportPreferences getImportSettings(Id accountId) {
+        ImportPreferences prefs = getImportPreferences();
+        prefs.priceMethod = DEFAULT_PRICE_METHOD;
+        prefs.autoAccept = false;
+        prefs.skipDuplicates = true;
+
+        SLO_Import_Preferences__c stored = SLO_Import_Preferences__c.getValues(UserInfo.getUserId());
+        if (stored == null) {
+            return prefs;
+        }
+        if (PRICE_METHODS.contains(stored.SLO_Price_Method__c)) {
+            prefs.priceMethod = stored.SLO_Price_Method__c;
+        }
+        prefs.autoAccept = stored.SLO_Auto_Accept__c == true;
+        prefs.skipDuplicates = stored.SLO_Skip_Duplicates__c != false;
+        prefs.columnMapping = String.isBlank(stored.SLO_Column_Mapping__c) ? null : stored.SLO_Column_Mapping__c;
+        prefs.priceBookId = usableSavedPriceBook(accountId, stored.SLO_Price_Book_Id__c);
+        return prefs;
+    }
+
+    // The saved price book when it is still active and offered for the account, otherwise null
+    private static String usableSavedPriceBook(Id accountId, String savedId) {
+        if (String.isBlank(savedId) || accountId == null) {
+            return null;
+        }
+        Boolean offered = false;
+        for (PicklistOption option : getCountryPriceBookOptions(accountId)) {
+            if (String.valueOf(option.value) == savedId) {
+                offered = true;
+                break;
+            }
+        }
+        if (!offered) {
+            return null;
+        }
+        Integer active = [SELECT COUNT() FROM Pricebook2 WHERE Id = :savedId AND IsActive = true];
+        return active > 0 ? savedId : null;
+    }
+
+    /**
+     * @description Remember every choice the user made on the import screen, on their own preferences
+     * record, for their next import on any account. A column mapping too long to store keeps the
+     * user's previous one.
+     */
+    @AuraEnabled(cacheable=false)
+    public static void saveImportSettings(Date startDate, String csvDelimiter, String columnMapping,
+                                          String priceMethod, String priceBookId,
+                                          Boolean autoAccept, Boolean skipDuplicates) {
+        try {
+            SLO_Import_Preferences__c prefs = SLO_Import_Preferences__c.getValues(UserInfo.getUserId());
+            if (prefs == null) {
+                prefs = new SLO_Import_Preferences__c(SetupOwnerId = UserInfo.getUserId());
+            }
+            prefs.SLO_Start_Date__c = startDate;
+            // Same rule as saveImportPreferences: comma (the final fallback) needs no stored value
+            Boolean isDefaultDelimiter = String.isBlank(csvDelimiter) || csvDelimiter == ',';
+            prefs.SLO_CSV_Delimiter__c = isDefaultDelimiter ? null : csvDelimiter;
+            if (String.isNotBlank(columnMapping) && columnMapping.length() <= MAX_SAVED_MAPPING_LENGTH) {
+                prefs.SLO_Column_Mapping__c = columnMapping;
+            }
+            prefs.SLO_Price_Method__c = PRICE_METHODS.contains(priceMethod) ? priceMethod : DEFAULT_PRICE_METHOD;
+            Boolean keepBook = prefs.SLO_Price_Method__c == 'Dedicated_Price_Book' && String.isNotBlank(priceBookId);
+            prefs.SLO_Price_Book_Id__c = keepBook ? priceBookId : null;
+            prefs.SLO_Auto_Accept__c = autoAccept == true;
+            prefs.SLO_Skip_Duplicates__c = skipDuplicates != false;
+            upsert prefs;
+        } catch (Exception e) {
+            throw new AuraHandledException('Error saving import settings: ' + e.getMessage());
+        }
+    }
 
     @AuraEnabled(cacheable=false)
     public static ImportPreferences getImportPreferences() {
