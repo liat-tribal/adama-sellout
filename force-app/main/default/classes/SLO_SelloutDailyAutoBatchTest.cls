@@ -86,6 +86,14 @@ private with sharing class SLO_SelloutDailyAutoBatchTest {
         ];
         if (!existing.isEmpty()) {
             System.assertEquals(SLO_SelloutDailyAutoScheduler.CRON_DAILY_0200, existing[0].CronExpression);
+            // Scheduling again must be refused, so the existing job is never duplicated
+            Boolean refused = false;
+            try {
+                SLO_SelloutDailyAutoScheduler.scheduleDaily();
+            } catch (AsyncException e) {
+                refused = true;
+            }
+            System.assert(refused, 'A second daily job with the same name must not be scheduled');
             return;
         }
         Test.startTest();
