@@ -77,6 +77,17 @@ private with sharing class SLO_SelloutDailyAutoBatchTest {
 
     @isTest
     static void scheduleDailyRegistersJob() {
+        // Where the org already runs the daily job (e.g. production), a second job with the same name
+        // cannot be scheduled; check the existing one instead
+        List<CronTrigger> existing = [
+            SELECT CronExpression FROM CronTrigger
+            WHERE CronJobDetail.Name = 'SLO Daily Automated Sellout'
+            LIMIT 1
+        ];
+        if (!existing.isEmpty()) {
+            System.assertEquals(SLO_SelloutDailyAutoScheduler.CRON_DAILY_0200, existing[0].CronExpression);
+            return;
+        }
         Test.startTest();
         Id jobId = SLO_SelloutDailyAutoScheduler.scheduleDaily();
         Test.stopTest();
